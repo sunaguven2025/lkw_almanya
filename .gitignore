@@ -32,6 +32,8 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+/android/build/
+.env
 
 # Symbolication related
 app.*.symbols
@@ -48,3 +50,6 @@ app.*.map.json
 .env
 .env.*
 !.env.example
+
+# Flutter build folders
+**/build/
