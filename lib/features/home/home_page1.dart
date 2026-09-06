@@ -12,7 +12,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:wakelock_plus/wakelock_plus.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../theme/app_theme.dart';
 
@@ -57,144 +56,6 @@ class _FavoritePlace {
       address: json['address']?.toString() ?? '',
     );
   }
-}
-
-class _RouteStop {
-  final String id;
-  final String name;
-  final LatLng location;
-  final String address;
-
-  _RouteStop({
-    required this.id,
-    required this.name,
-    required this.location,
-    required this.address,
-  });
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'latitude': location.latitude,
-        'longitude': location.longitude,
-        'address': address,
-      };
-
-  factory _RouteStop.fromJson(Map<String, dynamic> json) => _RouteStop(
-        id: json['id']?.toString() ?? '',
-        name: json['name']?.toString() ?? 'Durak',
-        location: LatLng(
-          (json['latitude'] as num).toDouble(),
-          (json['longitude'] as num).toDouble(),
-        ),
-        address: json['address']?.toString() ?? '',
-      );
-}
-
-class _RouteHistoryItem {
-  final String id;
-  final String destinationName;
-  final LatLng destination;
-  final String vehicle;
-  final DateTime timestamp;
-  final double distance;
-  final double duration;
-
-  _RouteHistoryItem({
-    required this.id,
-    required this.destinationName,
-    required this.destination,
-    required this.vehicle,
-    required this.timestamp,
-    required this.distance,
-    required this.duration,
-  });
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'destinationName': destinationName,
-        'latitude': destination.latitude,
-        'longitude': destination.longitude,
-        'vehicle': vehicle,
-        'timestamp': timestamp.toIso8601String(),
-        'distance': distance,
-        'duration': duration,
-      };
-
-  factory _RouteHistoryItem.fromJson(Map<String, dynamic> json) =>
-      _RouteHistoryItem(
-        id: json['id']?.toString() ?? '',
-        destinationName: json['destinationName']?.toString() ?? '',
-        destination: LatLng(
-          (json['latitude'] as num).toDouble(),
-          (json['longitude'] as num).toDouble(),
-        ),
-        vehicle: json['vehicle']?.toString() ?? 'car',
-        timestamp: DateTime.tryParse(json['timestamp']?.toString() ?? '') ??
-            DateTime.now(),
-        distance: (json['distance'] as num?)?.toDouble() ?? 0,
-        duration: (json['duration'] as num?)?.toDouble() ?? 0,
-      );
-}
-
-class _TruckParking {
-  final LatLng location;
-  final String name;
-  final String? capacity;
-  final bool hasRestaurant;
-  final bool hasShower;
-  final bool hasFuel;
-
-  _TruckParking({
-    required this.location,
-    required this.name,
-    this.capacity,
-    this.hasRestaurant = false,
-    this.hasShower = false,
-    this.hasFuel = false,
-  });
-}
-
-class _FuelStation {
-  final LatLng location;
-  final String name;
-  final bool hgvFriendly;
-  final bool hasAdBlue;
-  final bool hasRestaurant;
-
-  _FuelStation({
-    required this.location,
-    required this.name,
-    this.hgvFriendly = false,
-    this.hasAdBlue = false,
-    this.hasRestaurant = false,
-  });
-}
-
-class _SpeedLimitSegment {
-  final LatLng start;
-  final LatLng end;
-  final int maxSpeed;
-
-  _SpeedLimitSegment({
-    required this.start,
-    required this.end,
-    required this.maxSpeed,
-  });
-}
-
-class _RouteRestriction {
-  final LatLng location;
-  final String type;
-  final String? value;
-  final String description;
-
-  _RouteRestriction({
-    required this.location,
-    required this.type,
-    this.value,
-    required this.description,
-  });
 }
 
 class _NavigationInstruction {
@@ -295,52 +156,6 @@ class _HomePageState extends State<HomePage> {
 
   int _currentInstructionIndex = 0;
 
-  List<_RouteRestriction> _routeRestrictions = <_RouteRestriction>[];
-
-  bool _showRestrictions = true;
-
-  String _routeRestrictionWarning = '';
-
-  // ============================================================
-  // KAMYON TONAJ SINIFI
-  // ============================================================
-
-  double _truckWeight = 40.0;
-
-  double _truckHeight = 4.0;
-
-  double _truckWidth = 2.55;
-
-  double _truckLength = 16.5;
-
-  double _truckAxleLoad = 11.5;
-
-  List<_RouteStop> _stops = <_RouteStop>[];
-
-  static const String _historyStorageKey = 'lkw_route_history';
-
-  static const String _stopsStorageKey = 'lkw_route_stops';
-
-  List<_RouteHistoryItem> _routeHistory = <_RouteHistoryItem>[];
-
-  List<_TruckParking> _truckParkings = <_TruckParking>[];
-
-  List<_FuelStation> _fuelStations = <_FuelStation>[];
-
-  bool _showTruckParkings = false;
-
-  bool _showFuelStations = false;
-
-  List<_SpeedLimitSegment> _speedLimits = <_SpeedLimitSegment>[];
-
-  int _currentSpeedLimit = 0;
-
-  bool _isDarkMode = false;
-
-  DateTime? _drivingStartTime;
-
-  bool _fatigueWarningShown = false;
-
   double _remainingDistance = 0.0;
 
   double _remainingDuration = 0.0;
@@ -376,10 +191,6 @@ class _HomePageState extends State<HomePage> {
     _initializeVoice();
 
     _loadFavorites();
-
-    _loadRouteHistory();
-
-    _loadStops();
   }
 
   @override
@@ -1515,12 +1326,6 @@ class _HomePageState extends State<HomePage> {
           _checkDestinationReached(
             location,
           );
-
-          _updateCurrentSpeedLimit(
-            location,
-          );
-
-          _checkFatigue();
         }
       },
     );
@@ -1614,30 +1419,12 @@ class _HomePageState extends State<HomePage> {
       _navigationInstructions = <_NavigationInstruction>[];
       routePoints = <LatLng>[];
       alternativeRoutePoints = <List<LatLng>>[];
-      _routeRestrictions = <_RouteRestriction>[];
-      _routeRestrictionWarning = '';
-      _speedLimits = <_SpeedLimitSegment>[];
-      _currentSpeedLimit = 0;
-      _truckParkings = <_TruckParking>[];
-      _fuelStations = <_FuelStation>[];
-      _truckWeight = 40.0;
-      _truckHeight = 4.0;
-      _truckWidth = 2.55;
-      _truckLength = 16.5;
-      _truckAxleLoad = 11.5;
-      _truckWeight = 40.0;
-      _truckHeight = 4.0;
-      _truckWidth = 2.55;
-      _truckLength = 16.5;
-      _truckAxleLoad = 11.5;
       destination = null;
       addressController.clear();
       _remainingDistance = 0;
       _remainingDuration = 0;
       _currentInstructionText = 'Rotanız hazırlanıyor...';
       _currentInstructionDistance = 0;
-      _drivingStartTime = null;
-      _fatigueWarningShown = false;
     });
 
     mapController.rotate(0);
@@ -1805,39 +1592,26 @@ class _HomePageState extends State<HomePage> {
     }
 
     String text = instruction.text;
+
+    if (distance > 250) {
+      return;
+    }
+
+    instruction.spoken = true;
+
     final String distanceText = _formatDistance(distance);
-    String? speakText;
 
-    if (distance <= 50) {
-      instruction.spoken = true;
-      if (_voiceLanguage == 'tr-TR') {
-        speakText = 'Şimdi $text';
-      } else if (_voiceLanguage == 'en-US') {
-        speakText = 'Now $text';
-      } else {
-        speakText = 'Jetzt $text';
-      }
-    } else if (distance <= 200) {
-      if (_voiceLanguage == 'tr-TR') {
-        speakText = '$distanceText sonra $text';
-      } else if (_voiceLanguage == 'en-US') {
-        speakText = '$text in $distanceText';
-      } else {
-        speakText = '$text in $distanceText';
-      }
-    } else if (distance <= 500) {
-      if (_voiceLanguage == 'tr-TR') {
-        speakText = '$distanceText sonra $text';
-      } else if (_voiceLanguage == 'en-US') {
-        speakText = '$text in $distanceText';
-      } else {
-        speakText = '$text in $distanceText';
-      }
+    if (_voiceLanguage == 'tr-TR') {
+      text = '$distanceText sonra $text.';
+    } else if (_voiceLanguage == 'en-US') {
+      text = '$text in $distanceText.';
+    } else {
+      text = '$text in $distanceText.';
     }
 
-    if (speakText != null) {
-      await _speak(speakText);
-    }
+    await _speak(
+      text,
+    );
   }
 
   // ============================================================
@@ -2134,8 +1908,6 @@ class _HomePageState extends State<HomePage> {
 
         alternativeRoutePoints = <List<LatLng>>[];
 
-        _routeRestrictions = <_RouteRestriction>[];
-
         _navigationStarted = false;
 
         _navigationInstructions = <_NavigationInstruction>[];
@@ -2254,8 +2026,6 @@ class _HomePageState extends State<HomePage> {
       routePoints = <LatLng>[];
 
       alternativeRoutePoints = <List<LatLng>>[];
-
-      _routeRestrictions = <_RouteRestriction>[];
 
       _navigationStarted = false;
 
@@ -2470,11 +2240,11 @@ class _HomePageState extends State<HomePage> {
                 'vehicle_type': 'hgv',
                 'profile_params': {
                   'restrictions': {
-                    'height': math.max(_truckHeight, 3.90),
-                    'width': _truckWidth,
-                    'length': _truckLength,
-                    'weight': _truckWeight,
-                    'axleload': _truckAxleLoad,
+                    'height': 4.0,
+                    'width': 2.55,
+                    'length': 16.5,
+                    'weight': 40.0,
+                    'axleload': 11.5,
                     'hazmat': false,
                   },
                 },
@@ -2620,25 +2390,6 @@ class _HomePageState extends State<HomePage> {
           points,
         );
 
-        _fetchRouteRestrictions(points);
-        _checkRouteRestrictions();
-        _fetchTruckParkings(points);
-        _fetchFuelStations(points);
-        _fetchSpeedLimits(points);
-
-        _drivingStartTime = DateTime.now();
-        _fatigueWarningShown = false;
-
-        _addRouteToHistory(
-          destinationPoint,
-          'truck',
-          addressController.text.isNotEmpty
-              ? addressController.text
-              : 'Kamyon Rotası',
-          totalDistance,
-          totalDuration,
-        );
-
         if (announce) {
           await _speak(
             _voiceLanguage == 'tr-TR'
@@ -2665,7 +2416,7 @@ class _HomePageState extends State<HomePage> {
         '${destinationPoint.latitude}'
         '?overview=full'
         '&geometries=geojson'
-        '&alternatives=2'
+        '&alternatives=true'
         '&steps=true',
       );
 
@@ -2775,47 +2526,25 @@ class _HomePageState extends State<HomePage> {
           mainRoute,
         );
 
-        _fetchRouteRestrictions(mainRoute);
-        _checkRouteRestrictions();
-        _fetchTruckParkings(mainRoute);
-        _fetchFuelStations(mainRoute);
-        _fetchSpeedLimits(mainRoute);
-
-        _drivingStartTime = DateTime.now();
-        _fatigueWarningShown = false;
-
-        _addRouteToHistory(
-          destinationPoint,
-          'car',
-          addressController.text.isNotEmpty
-              ? addressController.text
-              : 'Otomobil Rotası',
-          totalDistance,
-          totalDuration,
-        );
-
         if (announce) {
           if (alternatives.isNotEmpty) {
             await _speak(
               _voiceLanguage == 'tr-TR'
                   ? 'Otomobil rotası hazır. '
-                      '${alternatives.length} alternatif rota mevcut. '
-                      'Haritada renkli çizgilerle gösteriliyor.'
+                      '${alternatives.length} alternatif rota bulundu.'
                   : _voiceLanguage == 'en-US'
                       ? 'Car route ready. '
-                          '${alternatives.length} alternative routes available. '
-                          'Shown as colored lines on the map.'
+                          '${alternatives.length} alternative routes found.'
                       : 'Die Autoroute ist bereit. '
-                          '${alternatives.length} alternative Routen verfügbar. '
-                          'Als farbige Linien auf der Karte angezeigt.',
+                          '${alternatives.length} alternative Routen gefunden.',
             );
           } else {
             await _speak(
               _voiceLanguage == 'tr-TR'
-                  ? 'Otomobil rotası hazır. Tek rota mevcut. Navigasyon başladı.'
+                  ? 'Otomobil rotası hazır. Navigasyon başladı.'
                   : _voiceLanguage == 'en-US'
-                      ? 'Car route ready. Single route available. Navigation started.'
-                      : 'Die Autoroute ist bereit. Einzelne Route verfügbar. Navigation gestartet.',
+                      ? 'Car route ready. Navigation started.'
+                      : 'Die Autoroute ist bereit. Navigation gestartet.',
             );
           }
         }
@@ -2840,1227 +2569,6 @@ class _HomePageState extends State<HomePage> {
       _showRouteError(
         'Rota hatası: $e',
       );
-    }
-  }
-
-  // ============================================================
-  // ROTA GEÇMİŞİ
-  // ============================================================
-
-  Future<void> _loadRouteHistory() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final String? saved = prefs.getString(_historyStorageKey);
-      if (saved == null || saved.isEmpty) {
-        if (mounted) setState(() => _routeHistory = <_RouteHistoryItem>[]);
-        return;
-      }
-      final dynamic decoded = jsonDecode(saved);
-      if (decoded is! List) return;
-      final List<_RouteHistoryItem> loaded = <_RouteHistoryItem>[];
-      for (final dynamic item in decoded) {
-        if (item is Map) {
-          try {
-            loaded.add(
-                _RouteHistoryItem.fromJson(Map<String, dynamic>.from(item)));
-          } catch (e) {
-            debugPrint('HISTORY LOAD ITEM ERROR: $e');
-          }
-        }
-      }
-      if (mounted) setState(() => _routeHistory = loaded);
-    } catch (e) {
-      debugPrint('HISTORY LOAD ERROR: $e');
-    }
-  }
-
-  Future<void> _saveRouteHistory() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final String encoded = jsonEncode(
-        _routeHistory.map((item) => item.toJson()).toList(),
-      );
-      await prefs.setString(_historyStorageKey, encoded);
-    } catch (e) {
-      debugPrint('HISTORY SAVE ERROR: $e');
-    }
-  }
-
-  Future<void> _addRouteToHistory(
-    LatLng dest,
-    String vehicle,
-    String name,
-    double distance,
-    double duration,
-  ) async {
-    final item = _RouteHistoryItem(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      destinationName: name,
-      destination: dest,
-      vehicle: vehicle,
-      timestamp: DateTime.now(),
-      distance: distance,
-      duration: duration,
-    );
-    setState(() {
-      _routeHistory.insert(0, item);
-      if (_routeHistory.length > 20) {
-        _routeHistory = _routeHistory.sublist(0, 20);
-      }
-    });
-    await _saveRouteHistory();
-  }
-
-  void _showRouteHistory() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (BuildContext ctx) {
-        return SafeArea(
-          child: SizedBox(
-            height: MediaQuery.of(context).size.height * 0.72,
-            child: Column(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.history, color: AppTheme.primaryBlue),
-                      SizedBox(width: 10),
-                      Text(
-                        'Rota Geçmişi',
-                        style: TextStyle(
-                            fontSize: 21, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(),
-                Expanded(
-                  child: _routeHistory.isEmpty
-                      ? const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(30),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.history,
-                                    size: 70, color: Colors.grey),
-                                SizedBox(height: 15),
-                                Text(
-                                  'Henüz rota geçmişi yok.',
-                                  style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      : ListView.separated(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          itemCount: _routeHistory.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (BuildContext ctx, int index) {
-                            final item = _routeHistory[index];
-                            return ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: item.vehicle == 'truck'
-                                    ? AppTheme.truckOrange
-                                    : AppTheme.primaryBlue,
-                                child: Icon(
-                                  item.vehicle == 'truck'
-                                      ? Icons.local_shipping
-                                      : Icons.directions_car,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              title: Text(
-                                item.destinationName,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold),
-                              ),
-                              subtitle: Text(
-                                '${_formatDistance(item.distance)} · ${_formatDuration(item.duration)} · '
-                                '${item.timestamp.day}.${item.timestamp.month}.${item.timestamp.year}',
-                              ),
-                              trailing: IconButton(
-                                icon:
-                                    const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () async {
-                                  setState(() => _routeHistory.removeAt(index));
-                                  await _saveRouteHistory();
-                                  if (!mounted) return;
-                                  Navigator.of(context).pop();
-                                  _showRouteHistory();
-                                },
-                              ),
-                              onTap: () {
-                                final dest = item.destination;
-                                final name = item.destinationName;
-                                final id = item.id;
-                                Navigator.of(context).pop();
-                                if (!mounted) return;
-                                _selectFavorite(_FavoritePlace(
-                                  id: id,
-                                  name: name,
-                                  latitude: dest.latitude,
-                                  longitude: dest.longitude,
-                                  address: name,
-                                ));
-                              },
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // ============================================================
-  // DURAKLAR
-  // ============================================================
-
-  Future<void> _loadStops() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final String? saved = prefs.getString(_stopsStorageKey);
-      if (saved == null || saved.isEmpty) {
-        if (mounted) setState(() => _stops = <_RouteStop>[]);
-        return;
-      }
-      final dynamic decoded = jsonDecode(saved);
-      if (decoded is! List) return;
-      final List<_RouteStop> loaded = <_RouteStop>[];
-      for (final dynamic item in decoded) {
-        if (item is Map) {
-          try {
-            loaded.add(_RouteStop.fromJson(Map<String, dynamic>.from(item)));
-          } catch (e) {
-            debugPrint('STOPS LOAD ITEM ERROR: $e');
-          }
-        }
-      }
-      if (mounted) setState(() => _stops = loaded);
-    } catch (e) {
-      debugPrint('STOPS LOAD ERROR: $e');
-    }
-  }
-
-  Future<void> _saveStops() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final String encoded = jsonEncode(
-        _stops.map((s) => s.toJson()).toList(),
-      );
-      await prefs.setString(_stopsStorageKey, encoded);
-    } catch (e) {
-      debugPrint('STOPS SAVE ERROR: $e');
-    }
-  }
-
-  Future<void> _addStop(LatLng location, String name, String address) async {
-    final stop = _RouteStop(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      name: name.isNotEmpty ? name : 'Durak ${_stops.length + 1}',
-      location: location,
-      address: address,
-    );
-    setState(() => _stops.add(stop));
-    await _saveStops();
-  }
-
-  Future<void> _removeStop(_RouteStop stop) async {
-    setState(() => _stops.removeWhere((s) => s.id == stop.id));
-    await _saveStops();
-  }
-
-  void _showStopsManager() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (BuildContext ctx) {
-        return SafeArea(
-          child: SizedBox(
-            height: MediaQuery.of(context).size.height * 0.72,
-            child: Column(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.flag, color: AppTheme.primaryBlue),
-                      SizedBox(width: 10),
-                      Text(
-                        'Duraklar',
-                        style: TextStyle(
-                            fontSize: 21, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(),
-                Expanded(
-                  child: _stops.isEmpty
-                      ? const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(30),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.flag_outlined,
-                                    size: 70, color: Colors.grey),
-                                SizedBox(height: 15),
-                                Text(
-                                  'Henüz durak eklenmemiş.',
-                                  style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold),
-                                ),
-                                SizedBox(height: 8),
-                                Text(
-                                  'Haritaya uzun basarak durak ekleyebilirsiniz.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      : ReorderableListView.builder(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          itemCount: _stops.length,
-                          onReorderItem: (oldIndex, newIndex) {
-                            setState(() {
-                              final item = _stops.removeAt(oldIndex);
-                              _stops.insert(newIndex, item);
-                            });
-                            _saveStops();
-                          },
-                          itemBuilder: (BuildContext ctx, int index) {
-                            final stop = _stops[index];
-                            return ListTile(
-                              key: ValueKey(stop.id),
-                              leading: CircleAvatar(
-                                backgroundColor: Colors.green,
-                                child: Text('${index + 1}',
-                                    style:
-                                        const TextStyle(color: Colors.white)),
-                              ),
-                              title: Text(stop.name,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold)),
-                              subtitle: Text(stop.address),
-                              trailing: IconButton(
-                                icon:
-                                    const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _removeStop(stop),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-                if (_stops.length >= 2)
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        _calculateMultiStopRoute();
-                      },
-                      icon: const Icon(Icons.route),
-                      label: const Text('Çoklu Durak Rotası Hesapla'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryBlue,
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(double.infinity, 48),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _calculateMultiStopRoute() async {
-    if (userLocation == null || _stops.isEmpty) return;
-    if (_stops.length < 2) {
-      _showRouteError('En az 2 durak gerekli.');
-      return;
-    }
-
-    WakelockPlus.enable();
-    _showRouteLoading();
-
-    try {
-      final List<LatLng> allPoints = [
-        userLocation!,
-        ..._stops.map((s) => s.location)
-      ];
-      final List<LatLng> fullRoute = <LatLng>[];
-      double totalDistance = 0;
-      double totalDuration = 0;
-
-      for (int i = 0; i < allPoints.length - 1; i++) {
-        final LatLng from = allPoints[i];
-        final LatLng to = allPoints[i + 1];
-
-        final Uri url = Uri.parse(
-          'https://router.project-osrm.org/route/v1/driving/'
-          '${from.longitude},${from.latitude};${to.longitude},${to.latitude}'
-          '?overview=full&geometries=geojson&steps=true',
-        );
-
-        final response = await http.get(url);
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          final routes = data['routes'];
-          if (routes is List && routes.isNotEmpty) {
-            final points = _convertCoordinatesToPoints(
-              routes[0]['geometry']['coordinates'],
-            );
-            fullRoute.addAll(points);
-            totalDistance += _numberValue(routes[0]['distance']);
-            totalDuration += _numberValue(routes[0]['duration']);
-          }
-        }
-      }
-
-      if (!mounted) return;
-      Navigator.of(context).maybePop();
-
-      if (fullRoute.isEmpty) {
-        _showRouteError('Çoklu durak rotası hesaplanamadı.');
-        return;
-      }
-
-      setState(() {
-        routeColor = AppTheme.primaryBlue;
-        routePoints = fullRoute;
-        alternativeRoutePoints = <List<LatLng>>[];
-        _navigationStarted = true;
-        _lastSpokenRouteIndex = -1;
-        _lastNavigationSpeech = null;
-        _isFollowingLocation = true;
-        _navigationInstructions = <_NavigationInstruction>[];
-        _currentInstructionIndex = 0;
-        _remainingDistance = totalDistance;
-        _remainingDuration = totalDuration;
-        _currentInstructionText = 'Rotayı takip edin.';
-        _currentInstructionDistance = 0;
-      });
-
-      _fitRouteOnMap(fullRoute);
-      _fetchRouteRestrictions(fullRoute);
-      _fetchTruckParkings(fullRoute);
-      _fetchFuelStations(fullRoute);
-      _fetchSpeedLimits(fullRoute);
-
-      await _speak(
-        _voiceLanguage == 'tr-TR'
-            ? 'Çoklu durak rotası hazır. ${_stops.length} durak.'
-            : _voiceLanguage == 'en-US'
-                ? 'Multi-stop route ready. ${_stops.length} stops.'
-                : 'Mehrstopp-Route bereit. ${_stops.length} Stopps.',
-      );
-    } catch (e) {
-      if (mounted) Navigator.of(context).maybePop();
-      _showRouteError('Çoklu durak hatası: $e');
-    }
-  }
-
-  // ============================================================
-  // TIR PARK / YAKIT / HIZ / YORGUNLUK / GECE / PAYLAŞ
-  // ============================================================
-
-  Future<void> _fetchTruckParkings(List<LatLng> points) async {
-    if (points.isEmpty) return;
-    double minLat = points.first.latitude, maxLat = points.first.latitude;
-    double minLng = points.first.longitude, maxLng = points.first.longitude;
-    for (final p in points) {
-      if (p.latitude < minLat) minLat = p.latitude;
-      if (p.latitude > maxLat) maxLat = p.latitude;
-      if (p.longitude < minLng) minLng = p.longitude;
-      if (p.longitude > maxLng) maxLng = p.longitude;
-    }
-    const double pad = 0.05;
-    minLat -= pad;
-    maxLat += pad;
-    minLng -= pad;
-    maxLng += pad;
-
-    final String query = '''[out:json][timeout:25];
-(
-  node["amenity"="truck_parking"]($minLat,$minLng,$maxLat,$maxLng);
-  way["amenity"="truck_parking"]($minLat,$minLng,$maxLat,$maxLng);
-  node["highway"="services"]($minLat,$minLng,$maxLat,$maxLng);
-  way["highway"="services"]($minLat,$minLng,$maxLat,$maxLng);
-  node["amenity"="rest_area"]($minLat,$minLng,$maxLat,$maxLng);
-  way["amenity"="rest_area"]($minLat,$minLng,$maxLat,$maxLng);
-);
-out center;''';
-
-    try {
-      final response = await http.post(
-        Uri.parse('https://overpass-api.de/api/interpreter'),
-        body: query,
-        headers: const {'Content-Type': 'application/x-www-form-urlencoded'},
-      );
-      if (response.statusCode != 200) return;
-      final data = jsonDecode(response.body);
-      final List<dynamic> elements =
-          data['elements'] is List ? data['elements'] as List : <dynamic>[];
-      final List<_TruckParking> parkings = <_TruckParking>[];
-      for (final dynamic element in elements) {
-        if (element is! Map) {
-          continue;
-        }
-        if (element['type']?.toString() != 'way' &&
-            element['type']?.toString() != 'node') {
-          continue;
-        }
-        final tags = Map<String, dynamic>.from(element['tags'] as Map? ?? {});
-        double? lat, lon;
-        if (element['type']?.toString() == 'node') {
-          lat = (element['lat'] as num?)?.toDouble();
-          lon = (element['lon'] as num?)?.toDouble();
-        } else {
-          final center =
-              Map<String, dynamic>.from(element['center'] as Map? ?? {});
-          lat = (center['lat'] as num?)?.toDouble();
-          lon = (center['lon'] as num?)?.toDouble();
-        }
-        if (lat == null || lon == null) {
-          continue;
-        }
-        parkings.add(_TruckParking(
-          location: LatLng(lat, lon),
-          name: tags['name']?.toString() ?? 'TIR Parkı',
-          capacity: tags['capacity']?.toString(),
-          hasRestaurant: tags['restaurant']?.toString() == 'yes' ||
-              tags['food']?.toString() == 'yes',
-          hasShower: tags['shower']?.toString() == 'yes',
-          hasFuel: tags['fuel']?.toString() == 'yes',
-        ));
-      }
-      if (mounted) setState(() => _truckParkings = parkings);
-    } catch (e) {
-      debugPrint('TRUCK PARKING ERROR: $e');
-    }
-  }
-
-  Future<void> _fetchFuelStations(List<LatLng> points) async {
-    if (points.isEmpty) return;
-    double minLat = points.first.latitude, maxLat = points.first.latitude;
-    double minLng = points.first.longitude, maxLng = points.first.longitude;
-    for (final p in points) {
-      if (p.latitude < minLat) minLat = p.latitude;
-      if (p.latitude > maxLat) maxLat = p.latitude;
-      if (p.longitude < minLng) minLng = p.longitude;
-      if (p.longitude > maxLng) maxLng = p.longitude;
-    }
-    const double pad = 0.05;
-    minLat -= pad;
-    maxLat += pad;
-    minLng -= pad;
-    maxLng += pad;
-
-    final String query = '''[out:json][timeout:25];
-(
-  node["amenity"="fuel"]["hgv"="yes"]($minLat,$minLng,$maxLat,$maxLng);
-  node["amenity"="fuel"]["truck"="yes"]($minLat,$minLng,$maxLat,$maxLng);
-  way["amenity"="fuel"]["hgv"="yes"]($minLat,$minLng,$maxLat,$maxLng);
-);
-out center;''';
-
-    try {
-      final response = await http.post(
-        Uri.parse('https://overpass-api.de/api/interpreter'),
-        body: query,
-        headers: const {'Content-Type': 'application/x-www-form-urlencoded'},
-      );
-      if (response.statusCode != 200) return;
-      final data = jsonDecode(response.body);
-      final List<dynamic> elements =
-          data['elements'] is List ? data['elements'] as List : <dynamic>[];
-      final List<_FuelStation> stations = <_FuelStation>[];
-      for (final dynamic element in elements) {
-        if (element is! Map) {
-          continue;
-        }
-        final tags = Map<String, dynamic>.from(element['tags'] as Map? ?? {});
-        double? lat, lon;
-        if (element['type']?.toString() == 'node') {
-          lat = (element['lat'] as num?)?.toDouble();
-          lon = (element['lon'] as num?)?.toDouble();
-        } else {
-          final center =
-              Map<String, dynamic>.from(element['center'] as Map? ?? {});
-          lat = (center['lat'] as num?)?.toDouble();
-          lon = (center['lon'] as num?)?.toDouble();
-        }
-        if (lat == null || lon == null) {
-          continue;
-        }
-        stations.add(_FuelStation(
-          location: LatLng(lat, lon),
-          name: tags['name']?.toString() ?? 'Yakıt İstasyonu',
-          hgvFriendly: tags['hgv']?.toString() == 'yes' ||
-              tags['truck']?.toString() == 'yes',
-          hasAdBlue: tags['adblue']?.toString() == 'yes' ||
-              tags['fuel:adblue']?.toString() == 'yes',
-          hasRestaurant: tags['restaurant']?.toString() == 'yes',
-        ));
-      }
-      if (mounted) setState(() => _fuelStations = stations);
-    } catch (e) {
-      debugPrint('FUEL STATION ERROR: $e');
-    }
-  }
-
-  Future<void> _fetchSpeedLimits(List<LatLng> points) async {
-    if (points.isEmpty) return;
-    double minLat = points.first.latitude, maxLat = points.first.latitude;
-    double minLng = points.first.longitude, maxLng = points.first.longitude;
-    for (final p in points) {
-      if (p.latitude < minLat) minLat = p.latitude;
-      if (p.latitude > maxLat) maxLat = p.latitude;
-      if (p.longitude < minLng) minLng = p.longitude;
-      if (p.longitude > maxLng) maxLng = p.longitude;
-    }
-    const double pad = 0.02;
-    minLat -= pad;
-    maxLat += pad;
-    minLng -= pad;
-    maxLng += pad;
-
-    final String query = '''[out:json][timeout:25];
-(
-  way["maxspeed"]($minLat,$minLng,$maxLat,$maxLng);
-);
-out geom;''';
-
-    try {
-      final response = await http.post(
-        Uri.parse('https://overpass-api.de/api/interpreter'),
-        body: query,
-        headers: const {'Content-Type': 'application/x-www-form-urlencoded'},
-      );
-      if (response.statusCode != 200) return;
-      final data = jsonDecode(response.body);
-      final List<dynamic> elements =
-          data['elements'] is List ? data['elements'] as List : <dynamic>[];
-      final List<_SpeedLimitSegment> limits = <_SpeedLimitSegment>[];
-      for (final dynamic element in elements) {
-        if (element is! Map) {
-          continue;
-        }
-        if (element['type']?.toString() != 'way') {
-          continue;
-        }
-        final tags = Map<String, dynamic>.from(element['tags'] as Map? ?? {});
-        final maxspeedStr = tags['maxspeed']?.toString() ?? '';
-        final int? maxspeed =
-            int.tryParse(maxspeedStr.replaceAll(RegExp(r'[^0-9]'), ''));
-        if (maxspeed == null || maxspeed <= 0) {
-          continue;
-        }
-        final List<dynamic> geometry = element['geometry'] is List
-            ? element['geometry'] as List
-            : <dynamic>[];
-        if (geometry.length < 2) {
-          continue;
-        }
-        for (int i = 0; i < geometry.length - 1; i++) {
-          final start = geometry[i];
-          final end = geometry[i + 1];
-          if (start is Map && end is Map) {
-            final sLat = (start['lat'] as num?)?.toDouble();
-            final sLon = (start['lon'] as num?)?.toDouble();
-            final eLat = (end['lat'] as num?)?.toDouble();
-            final eLon = (end['lon'] as num?)?.toDouble();
-            if (sLat != null && sLon != null && eLat != null && eLon != null) {
-              limits.add(_SpeedLimitSegment(
-                start: LatLng(sLat, sLon),
-                end: LatLng(eLat, eLon),
-                maxSpeed: maxspeed,
-              ));
-            }
-          }
-        }
-      }
-      if (mounted) setState(() => _speedLimits = limits);
-    } catch (e) {
-      debugPrint('SPEED LIMIT ERROR: $e');
-    }
-  }
-
-  void _updateCurrentSpeedLimit(LatLng currentLocation) {
-    if (_speedLimits.isEmpty) return;
-    double bestDistance = double.infinity;
-    int bestSpeed = 0;
-    for (final seg in _speedLimits) {
-      final midLat = (seg.start.latitude + seg.end.latitude) / 2;
-      final midLng = (seg.start.longitude + seg.end.longitude) / 2;
-      final dist = Geolocator.distanceBetween(
-        currentLocation.latitude,
-        currentLocation.longitude,
-        midLat,
-        midLng,
-      );
-      if (dist < bestDistance) {
-        bestDistance = dist;
-        bestSpeed = seg.maxSpeed;
-      }
-    }
-    if (bestDistance < 100 && bestSpeed != _currentSpeedLimit) {
-      setState(() => _currentSpeedLimit = bestSpeed);
-    }
-  }
-
-  void _checkFatigue() {
-    if (_drivingStartTime == null || !_navigationStarted) return;
-    final elapsed = DateTime.now().difference(_drivingStartTime!);
-    if (elapsed.inMinutes >= 270 && !_fatigueWarningShown) {
-      _fatigueWarningShown = true;
-      _speak(
-        _voiceLanguage == 'tr-TR'
-            ? 'Dikkat! 4.5 saatlik sürüş süreniz doldu. Mola vermeniz gerekiyor.'
-            : _voiceLanguage == 'en-US'
-                ? 'Attention! Your 4.5 hour driving time is up. You need to take a break.'
-                : 'Achtung! Ihre 4,5 Stunden Fahrzeit ist abgelaufen. Sie müssen eine Pause machen.',
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('⚠️ 4.5 saat doldu! Mola zamanı.'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 10),
-          ),
-        );
-      }
-    }
-  }
-
-  void _toggleDarkMode() {
-    setState(() => _isDarkMode = !_isDarkMode);
-    _speak(
-      _voiceLanguage == 'tr-TR'
-          ? _isDarkMode
-              ? 'Gece modu açıldı.'
-              : 'Gündüz modu açıldı.'
-          : _voiceLanguage == 'en-US'
-              ? _isDarkMode
-                  ? 'Dark mode enabled.'
-                  : 'Light mode enabled.'
-              : _isDarkMode
-                  ? 'Dunkelmodus aktiviert.'
-                  : 'Hellmodus aktiviert.',
-    );
-  }
-
-  String get _tileUrlTemplate {
-    if (_isDarkMode) {
-      return 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-    }
-    return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-  }
-
-  Future<void> _shareRoute() async {
-    if (destination == null) {
-      _showRouteError('Paylaşılacak hedef yok.');
-      return;
-    }
-    final String url =
-        'https://www.google.com/maps/search/?api=1&query=${destination!.latitude},${destination!.longitude}';
-    final String text = _voiceLanguage == 'tr-TR'
-        ? 'Navigasyon hedefim: ${addressController.text.isNotEmpty ? addressController.text : "Konum"}\n$url'
-        : _voiceLanguage == 'en-US'
-            ? 'My navigation destination: ${addressController.text.isNotEmpty ? addressController.text : "Location"}\n$url'
-            : 'Mein Navigationsziel: ${addressController.text.isNotEmpty ? addressController.text : "Standort"}\n$url';
-    await Share.share(text);
-  }
-
-  // ============================================================
-  // ALTERNATİF ROTA SEÇ
-  // ============================================================
-
-  void _selectAlternativeRoute(int index) {
-    if (index < 0 || index >= alternativeRoutePoints.length) return;
-
-    final List<LatLng> selected = alternativeRoutePoints[index];
-    final List<LatLng> oldMain = List<LatLng>.from(routePoints);
-
-    setState(() {
-      routePoints = selected;
-      alternativeRoutePoints[index] = oldMain;
-      _lastSpokenRouteIndex = -1;
-      _lastNavigationSpeech = null;
-      _currentInstructionIndex = 0;
-    });
-
-    _fitRouteOnMap(routePoints);
-
-    _speak(
-      _voiceLanguage == 'tr-TR'
-          ? 'Alternatif rota seçildi.'
-          : _voiceLanguage == 'en-US'
-              ? 'Alternative route selected.'
-              : 'Alternative Route ausgewählt.',
-    );
-  }
-
-  // ============================================================
-  // ROTA KISITLAMALARINI ÇEK (Overpass API)
-  // ============================================================
-
-  Future<void> _fetchRouteRestrictions(List<LatLng> points) async {
-    if (points.isEmpty) return;
-
-    double minLat = points.first.latitude;
-    double maxLat = points.first.latitude;
-    double minLng = points.first.longitude;
-    double maxLng = points.first.longitude;
-
-    for (final LatLng p in points) {
-      if (p.latitude < minLat) minLat = p.latitude;
-      if (p.latitude > maxLat) maxLat = p.latitude;
-      if (p.longitude < minLng) minLng = p.longitude;
-      if (p.longitude > maxLng) maxLng = p.longitude;
-    }
-
-    final double latPad = (maxLat - minLat) * 0.1 + 0.01;
-    final double lngPad = (maxLng - minLng) * 0.1 + 0.01;
-    minLat -= latPad;
-    maxLat += latPad;
-    minLng -= lngPad;
-    maxLng += lngPad;
-
-    final String query = '''[out:json][timeout:25];
-(
-  way["maxheight"]($minLat,$minLng,$maxLat,$maxLng);
-  way["maxweight"]($minLat,$minLng,$maxLat,$maxLng);
-  way["maxwidth"]($minLat,$minLng,$maxLat,$maxLng);
-  way["maxlength"]($minLat,$minLng,$maxLat,$maxLng);
-  way["hgv"="no"]($minLat,$minLng,$maxLat,$maxLng);
-  way["access"="no"]($minLat,$minLng,$maxLat,$maxLng);
-  way["highway"="construction"]($minLat,$minLng,$maxLat,$maxLng);
-  way["motor_vehicle"="no"]($minLat,$minLng,$maxLat,$maxLng);
-);
-out center;''';
-
-    try {
-      final http.Response response = await http.post(
-        Uri.parse('https://overpass-api.de/api/interpreter'),
-        body: query,
-        headers: const {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      );
-
-      if (response.statusCode != 200) return;
-
-      final dynamic data = jsonDecode(response.body);
-      final List<dynamic> elements =
-          data['elements'] is List ? data['elements'] as List : <dynamic>[];
-
-      final List<_RouteRestriction> restrictions = <_RouteRestriction>[];
-
-      for (final dynamic element in elements) {
-        if (element is! Map) {
-          continue;
-        }
-        if (element['type']?.toString() != 'way') {
-          continue;
-        }
-
-        final Map<String, dynamic> tags =
-            Map<String, dynamic>.from(element['tags'] as Map? ?? {});
-        final Map<String, dynamic> center =
-            Map<String, dynamic>.from(element['center'] as Map? ?? {});
-        final double? lat = (center['lat'] as num?)?.toDouble();
-        final double? lon = (center['lon'] as num?)?.toDouble();
-
-        if (lat == null || lon == null) {
-          continue;
-        }
-
-        final LatLng location = LatLng(lat, lon);
-
-        if (tags['maxheight'] != null) {
-          restrictions.add(_RouteRestriction(
-            location: location,
-            type: 'maxheight',
-            value: tags['maxheight']?.toString(),
-            description: 'Max Yükseklik: ${tags['maxheight']} m',
-          ));
-        }
-        if (tags['maxweight'] != null) {
-          restrictions.add(_RouteRestriction(
-            location: location,
-            type: 'maxweight',
-            value: tags['maxweight']?.toString(),
-            description: 'Max Ağırlık: ${tags['maxweight']} t',
-          ));
-        }
-        if (tags['maxwidth'] != null) {
-          restrictions.add(_RouteRestriction(
-            location: location,
-            type: 'maxwidth',
-            value: tags['maxwidth']?.toString(),
-            description: 'Max Genişlik: ${tags['maxwidth']} m',
-          ));
-        }
-        if (tags['maxlength'] != null) {
-          restrictions.add(_RouteRestriction(
-            location: location,
-            type: 'maxlength',
-            value: tags['maxlength']?.toString(),
-            description: 'Max Uzunluk: ${tags['maxlength']} m',
-          ));
-        }
-        if (tags['hgv']?.toString() == 'no') {
-          restrictions.add(_RouteRestriction(
-            location: location,
-            type: 'hgv_no',
-            value: null,
-            description: 'Kamyon Giremez',
-          ));
-        }
-        if (tags['access']?.toString() == 'no' ||
-            tags['access']?.toString() == 'private') {
-          restrictions.add(_RouteRestriction(
-            location: location,
-            type: 'closed',
-            value: null,
-            description: 'Kapalı Yol',
-          ));
-        }
-        if (tags['highway']?.toString() == 'construction') {
-          restrictions.add(_RouteRestriction(
-            location: location,
-            type: 'construction',
-            value: null,
-            description: 'Yapım Aşamasında',
-          ));
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _routeRestrictions = restrictions;
-        });
-      }
-    } catch (e) {
-      debugPrint('OVERPASS ERROR: \$e');
-    }
-  }
-
-  // ============================================================
-  // KISITLAMA İKONU
-  // ============================================================
-
-  Widget _buildRestrictionMarker(_RouteRestriction r) {
-    IconData icon;
-    Color color;
-
-    switch (r.type) {
-      case 'maxheight':
-        icon = Icons.height;
-        color = Colors.orange;
-        break;
-      case 'maxweight':
-        icon = Icons.scale;
-        color = Colors.deepOrange;
-        break;
-      case 'maxwidth':
-        icon = Icons.straighten;
-        color = Colors.purple;
-        break;
-      case 'maxlength':
-        icon = Icons.linear_scale;
-        color = Colors.indigo;
-        break;
-      case 'hgv_no':
-        icon = Icons.block;
-        color = Colors.red;
-        break;
-      case 'closed':
-        icon = Icons.do_not_disturb_on;
-        color = Colors.grey;
-        break;
-      case 'construction':
-        icon = Icons.construction;
-        color = Colors.brown;
-        break;
-      default:
-        icon = Icons.warning;
-        color = Colors.amber;
-    }
-
-    return GestureDetector(
-      onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(r.description),
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      },
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 2),
-          boxShadow: const [
-            BoxShadow(color: Colors.black38, blurRadius: 4),
-          ],
-        ),
-        child: Icon(icon, color: Colors.white, size: 18),
-      ),
-    );
-  }
-
-  // ============================================================
-  // ROTA ÜZERİNDEKİ KISITLAMALARI KONTROL ET VE UYAR
-  // ALTERNATİF ROTA ÖNER
-  // ============================================================
-
-  void _checkRouteRestrictions() {
-    if (_routeRestrictions.isEmpty) return;
-
-    int closedCount = 0;
-    int hgvBanCount = 0;
-    int constructionCount = 0;
-    int heightCount = 0;
-    int weightCount = 0;
-
-    for (final r in _routeRestrictions) {
-      switch (r.type) {
-        case 'closed':
-          {
-            closedCount++;
-            break;
-          }
-        case 'hgv_no':
-          {
-            hgvBanCount++;
-            break;
-          }
-        case 'construction':
-          {
-            constructionCount++;
-            break;
-          }
-        case 'maxheight':
-          {
-            heightCount++;
-            break;
-          }
-        case 'maxweight':
-          {
-            weightCount++;
-            break;
-          }
-      }
-    }
-
-    if (closedCount == 0 &&
-        hgvBanCount == 0 &&
-        constructionCount == 0 &&
-        heightCount == 0 &&
-        weightCount == 0) {
-      return;
-    }
-
-    // Düşük köprü kontrolü (3.90m altı)
-    int lowBridgeCount = 0;
-    for (final r in _routeRestrictions) {
-      if (r.type == 'maxheight' && r.value != null) {
-        final double? bridgeHeight = double.tryParse(r.value!);
-        if (bridgeHeight != null && bridgeHeight < 3.90) {
-          lowBridgeCount++;
-        }
-      }
-    }
-
-    String warning = '';
-    String speech = '';
-    String alertTitle = '';
-    String alertContent = '';
-    String alertYes = '';
-    String alertNo = '';
-
-    if (_voiceLanguage == 'tr-TR') {
-      final List<String> parts = <String>[];
-      if (closedCount > 0) parts.add('$closedCount kapalı yol');
-      if (hgvBanCount > 0) parts.add('$hgvBanCount kamyon yasağı');
-      if (constructionCount > 0) parts.add('$constructionCount yol çalışması');
-      if (heightCount > 0) parts.add('$heightCount yükseklik sınırı');
-      if (weightCount > 0) parts.add('$weightCount ağırlık sınırı');
-      warning = '⚠️ Rota üzerinde: ${parts.join(', ')}';
-      speech =
-          'Dikkat! Rota üzerinde ${parts.join(', ')} var. Lütfen dikkatli sürün.';
-      alertTitle = 'Rota Kısıtlaması Tespit Edildi';
-      alertContent =
-          'Mevcut rotada ${parts.join(', ')} bulundu.\n\nAlternatif rota kullanılsın mı?';
-      alertYes = 'Evet, Alternatif Rota';
-      alertNo = 'Hayır, Bu Rotayı Takip Et';
-    } else if (_voiceLanguage == 'en-US') {
-      final List<String> parts = <String>[];
-      if (closedCount > 0)
-        parts.add('$closedCount closed road${closedCount > 1 ? 's' : ''}');
-      if (hgvBanCount > 0)
-        parts.add('$hgvBanCount truck ban${hgvBanCount > 1 ? 's' : ''}');
-      if (constructionCount > 0)
-        parts.add(
-            '$constructionCount construction zone${constructionCount > 1 ? 's' : ''}');
-      if (heightCount > 0)
-        parts.add('$heightCount height limit${heightCount > 1 ? 's' : ''}');
-      if (weightCount > 0)
-        parts.add('$weightCount weight limit${weightCount > 1 ? 's' : ''}');
-      if (lowBridgeCount > 0)
-        parts.add(
-            '$lowBridgeCount low bridge${lowBridgeCount > 1 ? 's' : ''} (<3.90m)');
-      warning = '⚠️ On route: ${parts.join(', ')}';
-      speech =
-          'Attention! On route: ${parts.join(', ')}. Please drive carefully.';
-      alertTitle = 'Route Restriction Detected';
-      alertContent =
-          'Current route has ${parts.join(', ')}.\n\nUse alternative route?';
-      alertYes = 'Yes, Alternative Route';
-      alertNo = 'No, Follow This Route';
-    } else {
-      final List<String> parts = <String>[];
-      if (closedCount > 0)
-        parts.add('$closedCount gesperrte Straße${closedCount > 1 ? 'n' : ''}');
-      if (hgvBanCount > 0)
-        parts.add('$hgvBanCount LKW-Verbot${hgvBanCount > 1 ? 'e' : ''}');
-      if (constructionCount > 0)
-        parts.add(
-            '$constructionCount Baustelle${constructionCount > 1 ? 'n' : ''}');
-      if (heightCount > 0)
-        parts.add('$heightCount Höhenbegrenzung${heightCount > 1 ? 'en' : ''}');
-      if (weightCount > 0)
-        parts.add(
-            '$weightCount Gewichtsbegrenzung${weightCount > 1 ? 'en' : ''}');
-      if (lowBridgeCount > 0)
-        parts.add(
-            '$lowBridgeCount niedrige Brücke${lowBridgeCount > 1 ? 'n' : ''} (<3,90m)');
-      warning = '⚠️ Auf der Route: ${parts.join(', ')}';
-      speech =
-          'Achtung! Auf der Route: ${parts.join(', ')}. Bitte fahren Sie vorsichtig.';
-      alertTitle = 'Routenbeschränkung erkannt';
-      alertContent =
-          'Aktuelle Route hat ${parts.join(', ')}.\n\nAlternative Route verwenden?';
-      alertYes = 'Ja, Alternative Route';
-      alertNo = 'Nein, dieser Route folgen';
-    }
-
-    setState(() {
-      _routeRestrictionWarning = warning;
-    });
-
-    _speak(speech);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(warning),
-          backgroundColor: Colors.red.shade700,
-          duration: const Duration(seconds: 8),
-          action: SnackBarAction(
-            label: 'Tamam',
-            textColor: Colors.white,
-            onPressed: () {},
-          ),
-        ),
-      );
-    }
-
-    // Ciddi kısıtlama varsa ve alternatif rota mevcutsa kullanıcıya sor
-    final bool hasSeriousRestriction = closedCount > 0 ||
-        hgvBanCount > 0 ||
-        constructionCount > 0 ||
-        lowBridgeCount > 0;
-    if (hasSeriousRestriction && alternativeRoutePoints.isNotEmpty && mounted) {
-      _showAlternativeRouteDialog(alertTitle, alertContent, alertYes, alertNo);
-    }
-  }
-
-  // ============================================================
-  // ALTERNATİF ROTA DİYALOĞU
-  // ============================================================
-
-  Future<void> _showAlternativeRouteDialog(
-    String title,
-    String content,
-    String yesLabel,
-    String noLabel,
-  ) async {
-    await Future.delayed(const Duration(seconds: 2));
-    if (!mounted) return;
-
-    final bool? useAlternative = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          icon: const Icon(Icons.alt_route, color: Colors.orange, size: 40),
-          title: Text(title),
-          content: Text(content),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: Text(noLabel),
-            ),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              icon: const Icon(Icons.map),
-              label: Text(yesLabel),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (useAlternative == true &&
-        mounted &&
-        alternativeRoutePoints.isNotEmpty) {
-      _selectAlternativeRoute(0);
-      _speak(
-        _voiceLanguage == 'tr-TR'
-            ? 'Alternatif rota seçildi. Kısıtlama olmayan yoldan gidin.'
-            : _voiceLanguage == 'en-US'
-                ? 'Alternative route selected. Follow the unrestricted road.'
-                : 'Alternative Route ausgewählt. Folgen Sie der unbeschränkten Straße.',
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Alternatif rota seçildi.'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 4),
-          ),
-        );
-      }
     }
   }
 
@@ -4428,7 +2936,7 @@ out center;''';
     dynamic coordinates,
   ) {
     if (coordinates is! List) {
-      return const <LatLng>[];
+      return <LatLng>[];
     }
 
     return coordinates.map<LatLng>(
@@ -5016,86 +3524,6 @@ out center;''';
                       color: Colors.grey,
                     ),
                   ),
-                  if (_currentSpeedLimit > 0)
-                    Row(
-                      children: [
-                        const Icon(Icons.speed, size: 14, color: Colors.red),
-                        const SizedBox(width: 4),
-                        Text(
-                          '$_currentSpeedLimit km/s',
-                          style: const TextStyle(
-                            color: Colors.red,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  if (_drivingStartTime != null)
-                    Row(
-                      children: [
-                        const Icon(Icons.timer, size: 14, color: Colors.orange),
-                        const SizedBox(width: 4),
-                        Text(
-                          _formatDuration(
-                            DateTime.now()
-                                .difference(_drivingStartTime!)
-                                .inSeconds
-                                .toDouble(),
-                          ),
-                          style: TextStyle(
-                            color: DateTime.now()
-                                        .difference(_drivingStartTime!)
-                                        .inMinutes >=
-                                    270
-                                ? Colors.red
-                                : Colors.orange,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  if (_routeRestrictionWarning.isNotEmpty)
-                    Container(
-                      margin: const EdgeInsets.only(top: 4),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.red.shade200),
-                      ),
-                      child: Text(
-                        _routeRestrictionWarning,
-                        style: TextStyle(
-                          color: Colors.red.shade700,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  if (selectedVehicle == 'truck')
-                    Container(
-                      margin: const EdgeInsets.only(top: 4),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppTheme.truckOrange.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                            color: AppTheme.truckOrange.withValues(alpha: 0.3)),
-                      ),
-                      child: Text(
-                        '🚛 ${_truckWeight.toStringAsFixed(1)}t · ${_truckHeight}m×${_truckWidth}m · ${_truckLength}m',
-                        style: const TextStyle(
-                          color: AppTheme.truckOrange,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -5282,151 +3710,6 @@ out center;''';
               Icons.my_location,
             ),
           ),
-
-          const SizedBox(
-            height: 8,
-          ),
-
-          // KISITLAMALARI GÖSTER/GİZLE
-
-          FloatingActionButton.small(
-            heroTag: 'restrictions',
-            tooltip: _showRestrictions
-                ? 'Kısıtlamaları gizle'
-                : 'Kısıtlamaları göster',
-            backgroundColor: _showRestrictions ? Colors.orange : Colors.white,
-            foregroundColor: _showRestrictions ? Colors.white : Colors.orange,
-            onPressed: () {
-              setState(() {
-                _showRestrictions = !_showRestrictions;
-              });
-            },
-            child: Icon(
-              _showRestrictions
-                  ? Icons.warning_amber
-                  : Icons.warning_amber_outlined,
-            ),
-          ),
-
-          const SizedBox(
-            height: 8,
-          ),
-
-          // TIR PARK GÖSTER/GİZLE
-
-          FloatingActionButton.small(
-            heroTag: 'truck_parkings',
-            tooltip: _showTruckParkings
-                ? 'TIR parklarını gizle'
-                : 'TIR parklarını göster',
-            backgroundColor:
-                _showTruckParkings ? Colors.green.shade700 : Colors.white,
-            foregroundColor:
-                _showTruckParkings ? Colors.white : Colors.green.shade700,
-            onPressed: () {
-              setState(() {
-                _showTruckParkings = !_showTruckParkings;
-              });
-            },
-            child: Icon(
-              _showTruckParkings
-                  ? Icons.local_shipping
-                  : Icons.local_shipping_outlined,
-            ),
-          ),
-
-          const SizedBox(
-            height: 8,
-          ),
-
-          // YAKIT İSTASYONLARI GÖSTER/GİZLE
-
-          FloatingActionButton.small(
-            heroTag: 'fuel_stations',
-            tooltip: _showFuelStations
-                ? 'Yakıt istasyonlarını gizle'
-                : 'Yakıt istasyonlarını göster',
-            backgroundColor:
-                _showFuelStations ? Colors.blue.shade700 : Colors.white,
-            foregroundColor:
-                _showFuelStations ? Colors.white : Colors.blue.shade700,
-            onPressed: () {
-              setState(() {
-                _showFuelStations = !_showFuelStations;
-              });
-            },
-            child: Icon(
-              _showFuelStations
-                  ? Icons.local_gas_station
-                  : Icons.local_gas_station_outlined,
-            ),
-          ),
-
-          const SizedBox(
-            height: 8,
-          ),
-
-          // DURAKLAR
-
-          FloatingActionButton.small(
-            heroTag: 'stops',
-            tooltip: 'Duraklar',
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.teal,
-            onPressed: _showStopsManager,
-            child: Badge(
-              isLabelVisible: _stops.isNotEmpty,
-              label: Text('${_stops.length}'),
-              child: const Icon(Icons.flag),
-            ),
-          ),
-
-          const SizedBox(
-            height: 8,
-          ),
-
-          // GECE MODU
-
-          FloatingActionButton.small(
-            heroTag: 'dark_mode',
-            tooltip: _isDarkMode ? 'Gündüz modu' : 'Gece modu',
-            backgroundColor: _isDarkMode ? Colors.indigo : Colors.white,
-            foregroundColor: _isDarkMode ? Colors.white : Colors.indigo,
-            onPressed: _toggleDarkMode,
-            child: Icon(
-              _isDarkMode ? Icons.wb_sunny : Icons.nights_stay,
-            ),
-          ),
-
-          const SizedBox(
-            height: 8,
-          ),
-
-          // ROTA PAYLAŞ
-
-          FloatingActionButton.small(
-            heroTag: 'share',
-            tooltip: 'Rotayı paylaş',
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.teal,
-            onPressed: _shareRoute,
-            child: const Icon(Icons.share),
-          ),
-
-          const SizedBox(
-            height: 8,
-          ),
-
-          // ROTA GEÇMİŞİ
-
-          FloatingActionButton.small(
-            heroTag: 'history',
-            tooltip: 'Rota geçmişi',
-            backgroundColor: Colors.white,
-            foregroundColor: AppTheme.primaryBlue,
-            onPressed: _showRouteHistory,
-            child: const Icon(Icons.history),
-          ),
         ],
       ),
     );
@@ -5461,50 +3744,6 @@ out center;''';
             point,
           );
         },
-        onLongPress: (
-          TapPosition tapPosition,
-          LatLng point,
-        ) async {
-          final TextEditingController stopNameController =
-              TextEditingController();
-          final bool? add = await showDialog<bool>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Durak Ekle'),
-              content: TextField(
-                controller: stopNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Durak adı',
-                  hintText: 'Örn: Depo, Müşteri',
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('İptal'),
-                ),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('Ekle'),
-                ),
-              ],
-            ),
-          );
-          if (add == true && mounted) {
-            await _addStop(
-              point,
-              stopNameController.text.trim(),
-              '${point.latitude.toStringAsFixed(5)}, ${point.longitude.toStringAsFixed(5)}',
-            );
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  content: Text(
-                      '${stopNameController.text.trim()} durak olarak eklendi.')),
-            );
-          }
-          stopNameController.dispose();
-        },
         onPositionChanged: (
           MapPosition position,
           bool hasGesture,
@@ -5518,7 +3757,8 @@ out center;''';
       ),
       children: [
         TileLayer(
-          urlTemplate: _tileUrlTemplate,
+          urlTemplate: 'https://tile.openstreetmap.org/'
+              '{z}/{x}/{y}.png',
           userAgentPackageName: 'com.example.lkw_almanya',
         ),
 
@@ -5526,20 +3766,15 @@ out center;''';
 
         if (alternativeRoutePoints.isNotEmpty)
           PolylineLayer(
-            polylines: alternativeRoutePoints.asMap().entries.map(
+            polylines: alternativeRoutePoints.map(
               (
-                MapEntry<int, List<LatLng>> entry,
+                List<LatLng> points,
               ) {
-                final List<Color> altColors = [
-                  Colors.teal,
-                  Colors.purple,
-                  Colors.orange,
-                ];
                 return Polyline(
-                  points: entry.value,
-                  strokeWidth: 4.5,
-                  color: altColors[entry.key % altColors.length].withValues(
-                    alpha: 0.75,
+                  points: points,
+                  strokeWidth: 3.5,
+                  color: Colors.grey.withValues(
+                    alpha: 0.65,
                   ),
                 );
               },
@@ -5563,134 +3798,6 @@ out center;''';
 
         MarkerLayer(
           markers: [
-            if (_showTruckParkings)
-              ..._truckParkings.map(
-                (_TruckParking p) => Marker(
-                  point: p.location,
-                  width: 40,
-                  height: 40,
-                  builder: (BuildContext ctx) {
-                    return GestureDetector(
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              '${p.name}${p.capacity != null ? ' · Kapasite: ${p.capacity}' : ''}${p.hasRestaurant ? ' · Restoran' : ''}${p.hasShower ? ' · Duş' : ''}${p.hasFuel ? ' · Yakıt' : ''}',
-                            ),
-                            duration: const Duration(seconds: 4),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade700,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                          boxShadow: const [
-                            BoxShadow(color: Colors.black38, blurRadius: 4),
-                          ],
-                        ),
-                        child: const Icon(Icons.local_shipping,
-                            color: Colors.white, size: 20),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            if (_showFuelStations)
-              ..._fuelStations.map(
-                (_FuelStation f) => Marker(
-                  point: f.location,
-                  width: 36,
-                  height: 36,
-                  builder: (BuildContext ctx) {
-                    return GestureDetector(
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              '${f.name}${f.hgvFriendly ? ' · LKW Uyumlu' : ''}${f.hasAdBlue ? ' · AdBlue' : ''}${f.hasRestaurant ? ' · Restoran' : ''}',
-                            ),
-                            duration: const Duration(seconds: 4),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade700,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                          boxShadow: const [
-                            BoxShadow(color: Colors.black38, blurRadius: 4),
-                          ],
-                        ),
-                        child: const Icon(Icons.local_gas_station,
-                            color: Colors.white, size: 18),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            if (_showRestrictions)
-              ..._routeRestrictions.map(
-                (_RouteRestriction r) => Marker(
-                  point: r.location,
-                  width: 36,
-                  height: 36,
-                  builder: (BuildContext ctx) {
-                    return _buildRestrictionMarker(r);
-                  },
-                ),
-              ),
-            if (alternativeRoutePoints.isNotEmpty)
-              for (int i = 0; i < alternativeRoutePoints.length; i++)
-                if (alternativeRoutePoints[i].isNotEmpty)
-                  Marker(
-                    point: alternativeRoutePoints[i]
-                        [alternativeRoutePoints[i].length ~/ 2],
-                    width: 44,
-                    height: 44,
-                    builder: (BuildContext ctx) {
-                      final List<Color> altColors = [
-                        Colors.teal,
-                        Colors.purple,
-                        Colors.orange,
-                      ];
-                      return GestureDetector(
-                        onTap: () => _selectAlternativeRoute(i),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: altColors[i % altColors.length],
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.white,
-                              width: 2.5,
-                            ),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Colors.black38,
-                                blurRadius: 6,
-                              ),
-                            ],
-                          ),
-                          child: Center(
-                            child: Text(
-                              'A${i + 1}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
             if (userLocation != null)
               Marker(
                 point: userLocation!,
@@ -5753,7 +3860,6 @@ out center;''';
   ) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: _isDarkMode ? Colors.black87 : null,
         title: const Text(
           'LKW Almanya Navigasyon',
         ),

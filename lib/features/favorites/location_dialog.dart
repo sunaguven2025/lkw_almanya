@@ -15,17 +15,17 @@ class LocationDialog extends StatefulWidget {
 class _LocationDialogState extends State<LocationDialog> {
   final TextEditingController controller = TextEditingController();
 
-  String selectedIcon = "📍";
+  String selectedIcon = '🏠';
 
-  final List<String> icons = [
-    "🏠",
-    "🏢",
-    "🚛",
-    "⛽",
-    "🅿️",
-    "🍴",
-    "🛏️",
-    "📍",
+  final List<String> icons = <String>[
+    '🏠',
+    '🏢',
+    '🚚',
+    '⛽',
+    '🏪',
+    '🏭',
+    '🛣️',
+    '📍',
   ];
 
   @override
@@ -34,64 +34,108 @@ class _LocationDialogState extends State<LocationDialog> {
     super.dispose();
   }
 
+  void _save() {
+    final String name = controller.text.trim();
+
+    Navigator.pop(
+      context,
+      <String, String>{
+        'name': name.isEmpty ? 'Favori Konum' : name,
+        'icon': selectedIcon,
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text("Konumu Favorilere Kaydet"),
+      title: const Text(
+        'Konumu Favorilere Kaydet',
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(widget.address),
-            const SizedBox(height: 20),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              widget.address,
+              style: const TextStyle(
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(
+              height: 20,
+            ),
             TextField(
               controller: controller,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _save(),
               decoration: const InputDecoration(
-                labelText: "Yer Adı",
-                hintText: "Ev, İş, Depo, Müşteri...",
+                labelText: 'Yer Adı',
+                hintText: 'Ev, İş, Depo, Müşteri...',
                 border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(
+              height: 20,
+            ),
+            const Text(
+              'Simge seçin',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(
+              height: 12,
+            ),
             Wrap(
               spacing: 10,
               runSpacing: 10,
-              children: icons.map((icon) {
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      selectedIcon = icon;
-                    });
-                  },
-                  child: CircleAvatar(
-                    radius: 22,
-                    backgroundColor: selectedIcon == icon
-                        ? Colors.blue
-                        : Colors.grey.shade300,
-                    child: Text(
-                      icon,
-                      style: const TextStyle(fontSize: 22),
+              children: icons.map(
+                (String icon) {
+                  final bool selected = selectedIcon == icon;
+
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        selectedIcon = icon;
+                      });
+                    },
+                    child: CircleAvatar(
+                      radius: 24,
+                      backgroundColor:
+                          selected ? Colors.blue : Colors.grey.shade300,
+                      child: Text(
+                        icon,
+                        style: const TextStyle(
+                          fontSize: 23,
+                        ),
+                      ),
                     ),
-                  ),
-                );
-              }).toList(),
-            )
+                  );
+                },
+              ).toList(),
+            ),
           ],
         ),
       ),
-      actions: [
+      actions: <Widget>[
         TextButton(
-          child: const Text("İptal"),
-          onPressed: () => Navigator.pop(context),
-        ),
-        ElevatedButton(
-          child: const Text("Kaydet"),
           onPressed: () {
-            Navigator.pop(context, {
-              "name": controller.text.trim(),
-              "icon": selectedIcon,
-            });
+            Navigator.pop(context);
           },
+          child: const Text(
+            'İptal',
+          ),
+        ),
+        ElevatedButton.icon(
+          onPressed: _save,
+          icon: const Icon(
+            Icons.bookmark_add,
+          ),
+          label: const Text(
+            'Kaydet',
+          ),
         ),
       ],
     );

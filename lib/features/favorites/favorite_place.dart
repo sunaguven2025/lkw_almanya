@@ -7,7 +7,7 @@ class FavoritePlace {
   final String icon;
   final DateTime createdAt;
 
-  FavoritePlace({
+  const FavoritePlace({
     required this.id,
     required this.name,
     required this.address,
@@ -19,25 +19,46 @@ class FavoritePlace {
 
   Map<String, dynamic> toMap() {
     return {
-      "id": id,
-      "name": name,
-      "address": address,
-      "latitude": latitude,
-      "longitude": longitude,
-      "icon": icon,
-      "createdAt": createdAt.toIso8601String(),
+      'id': id,
+      'name': name,
+      'address': address,
+      'latitude': latitude,
+      'longitude': longitude,
+      'icon': icon,
+      'createdAt': createdAt.toIso8601String(),
     };
   }
 
   factory FavoritePlace.fromMap(Map<String, dynamic> map) {
     return FavoritePlace(
-      id: map["id"],
-      name: map["name"],
-      address: map["address"],
-      latitude: map["latitude"],
-      longitude: map["longitude"],
-      icon: map["icon"],
-      createdAt: DateTime.parse(map["createdAt"]),
+      id: map['id']?.toString() ?? '',
+      name: map['name']?.toString() ?? '',
+      address: map['address']?.toString() ?? '',
+      latitude: _toDouble(map['latitude']),
+      longitude: _toDouble(map['longitude']),
+      icon: map['icon']?.toString() ?? '📍',
+      createdAt: _toDateTime(map['createdAt']),
     );
+  }
+
+  static double _toDouble(dynamic value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    return double.tryParse(
+          value?.toString() ?? '',
+        ) ??
+        0.0;
+  }
+
+  static DateTime _toDateTime(dynamic value) {
+    if (value is DateTime) {
+      return value;
+    }
+
+    final String text = value?.toString() ?? '';
+
+    return DateTime.tryParse(text) ?? DateTime.now();
   }
 }

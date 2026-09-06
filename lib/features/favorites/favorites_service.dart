@@ -5,53 +5,121 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'favorite_place.dart';
 
 class FavoritesService {
-  static const String storageKey = "favorite_places";
+  static const String storageKey = 'favorite_places';
 
   Future<List<FavoritePlace>> getFavorites() async {
-    final prefs = await SharedPreferences.getInstance();
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
 
     final String? data = prefs.getString(storageKey);
 
-    if (data == null) {
-      return [];
+    if (data == null || data.trim().isEmpty) {
+      return <FavoritePlace>[];
     }
 
-    final List list = jsonDecode(data);
+    try {
+      final dynamic decoded = jsonDecode(data);
 
-    return list
-        .map((e) => FavoritePlace.fromMap(Map<String, dynamic>.from(e)))
-        .toList();
+      if (decoded is! List) {
+        return <FavoritePlace>[];
+      }
+
+      final List<FavoritePlace> favorites = <FavoritePlace>[];
+
+      for (final dynamic item in decoded) {
+        if (item is! Map) {
+          continue;
+        }
+
+        try {
+          final FavoritePlace place = FavoritePlace.fromMap(
+            Map<String, dynamic>.from(item),
+          );
+
+          if (place.id.isNotEmpty) {
+            favorites.add(place);
+          }
+        } catch (e) {
+          // Bozuk tek bir kayıt bütün favori listesini bozmasın.
+        }
+      }
+
+      return favorites;
+    } catch (e) {
+      return <FavoritePlace>[];
+    }
   }
 
-  Future<void> saveFavorites(List<FavoritePlace> favorites) async {
-    final prefs = await SharedPreferences.getInstance();
+  Future<bool> saveFavorites(
+    List<FavoritePlace> favorites,
+  ) async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
 
-    final String data = jsonEncode(favorites.map((e) => e.toMap()).toList());
+    try {
+      final String data = jsonEncode(
+        favorites
+            .map(
+              (FavoritePlace place) => place.toMap(),
+            )
+            .toList(),
+      );
 
-    await prefs.setString(storageKey, data);
+      return await prefs.setString(
+        storageKey,
+        data,
+      );
+    } catch (e) {
+      return false;
+    }
   }
 
-  Future<void> addFavorite(FavoritePlace place) async {
-    final list = await getFavorites();
+  Future<bool> addFavorite(
+    FavoritePlace place,
+  ) async {
+    final List<FavoritePlace> favorites = await getFavorites();
 
-    list.removeWhere((e) => e.id == place.id);
+    favorites.removeWhere(
+      (FavoritePlace item) => item.id == place.id,
+    );
 
-    list.insert(0, place);
+    favorites.insert(
+      0,
+      place,
+    );
 
-    await saveFavorites(list);
+    return saveFavorites(
+      favorites,
+    );
   }
 
-  Future<void> deleteFavorite(String id) async {
-    final list = await getFavorites();
+  Future<bool> deleteFavorite(
+    String id,
+  ) async {
+    final List<FavoritePlace> favorites = await getFavorites();
 
-    list.removeWhere((e) => e.id == id);
+    favorites.removeWhere(
+      (FavoritePlace item) => item.id == id,
+    );
 
-    await saveFavorites(list);
+    return saveFavorites(
+      favorites,
+    );
   }
 
-  Future<void> clearFavorites() async {
-    final prefs = await SharedPreferences.getInstance();
+  Future<bool> clearFavorites() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
 
-    await prefs.remove(storageKey);
+    return prefs.remove(
+      storageKey,
+    );
+  }
+
+  Future<bool> isFavorite(
+    String id,
+  ) async {
+    final List<FavoritePlace> favorites = await getFavorites();
+
+    return favorites.any(
+      (FavoritePlace place) => place.id == id,
+    );
   }
 }
