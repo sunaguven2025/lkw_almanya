@@ -16,9 +16,9 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../services/route_service.dart';
 import '../../theme/app_theme.dart';
-import 'models/truck_profile.dart';
-import 'services/truck_profile_storage.dart';
-import 'widgets/truck_profile_sheet.dart';
+import '../models/truck_profile.dart';
+import '../services/truck_profile_storage.dart';
+import '../widgets/truck_profile_sheet.dart';
 
 part 'home_page_logic.dart';
 part 'home_page_ui.dart';

@@ -696,70 +696,70 @@ extension _HomePageLogicX on _HomePageState {
     }
   }
 
- // ============================================================
+  // ============================================================
 // SES DİLİ
 // ============================================================
 
-Future<void> _changeVoiceLanguage(
-  String language,
-  String name,
-) async {
-  try {
-    await _speech.stop();
+  Future<void> _changeVoiceLanguage(
+    String language,
+    String name,
+  ) async {
+    try {
+      await _speech.stop();
 
-    await _tts.stop();
+      await _tts.stop();
 
-    await _tts.isLanguageAvailable(
-      language,
-    );
+      await _tts.isLanguageAvailable(
+        language,
+      );
 
-    await _tts.setLanguage(
-      language,
-    );
+      await _tts.setLanguage(
+        language,
+      );
 
-    if (!mounted) {
-      return;
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _voiceLanguage = language;
+        _voiceLanguageName = name;
+        _isListening = false;
+      });
+
+      String message;
+
+      if (language == 'de-DE') {
+        message = 'Die Sprache wurde auf Deutsch eingestellt.';
+      } else {
+        message = 'Die Sprache wurde auf Deutsch eingestellt.';
+      }
+
+      await _speak(
+        message,
+      );
+    } catch (e) {
+      debugPrint(
+        'VOICE LANGUAGE ERROR: $e',
+      );
+
+      _showRouteError(
+        'Ses dili değiştirilemedi.',
+      );
     }
-
-    setState(() {
-      _voiceLanguage = language;
-      _voiceLanguageName = name;
-      _isListening = false;
-    });
-
-    String message;
-
-    if (language == 'de-DE') {
-      message = 'Die Sprache wurde auf Deutsch eingestellt.';
-    } else {
-      message = 'Die Sprache wurde auf Deutsch eingestellt.';
-    }
-
-    await _speak(
-      message,
-    );
-  } catch (e) {
-    debugPrint(
-      'VOICE LANGUAGE ERROR: $e',
-    );
-
-    _showRouteError(
-      'Ses dili değiştirilemedi.',
-    );
   }
-}
 
 // ============================================================
 // SES DİLİ SEÇİCİ (Bottom Sheet)
 // ============================================================
 
-void _showVoiceLanguageSelector() {
-  showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    builder: (BuildContext sheetContext) {
-      return SafeArea(
-        child: Padding(
+  void _showVoiceLanguageSelector() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) {
+        return SafeArea(
+            child: Padding(
           padding: const EdgeInsets.only(
             left: 16,
             right: 16,
@@ -807,155 +807,154 @@ void _showVoiceLanguageSelector() {
               ),
             ],
           ),
-        );
-      );
-    },
-  );
-}
+        ));
+      },
+    );
+  }
 
 // ============================================================
 // SESLİ KOMUT
 // ============================================================
 
-Future<void> _startListening() async {
-  if (!_speechAvailable) {
-    await _initializeVoice();
-  }
-
-  if (!_speechAvailable) {
-    if (!mounted) {
-      return;
+  Future<void> _startListening() async {
+    if (!_speechAvailable) {
+      await _initializeVoice();
     }
 
-    _showRouteError(
-      'Sesli komut kullanılamıyor. Mikrofon iznini kontrol edin.',
-    );
-
-    return;
-  }
-
-  if (_isListening) {
-    await _stopListening();
-    return;
-  }
-
-  setState(() {
-    _isListening = true;
-    _voiceText = '';
-  });
-
-  await _speech.listen(
-    onResult: (result) {
+    if (!_speechAvailable) {
       if (!mounted) {
         return;
       }
 
-      setState(() {
-        _voiceText = result.recognizedWords;
-      });
+      _showRouteError(
+        'Sesli komut kullanılamıyor. Mikrofon iznini kontrol edin.',
+      );
 
-      if (result.finalResult && result.recognizedWords.trim().isNotEmpty) {
-        _processVoiceCommand(
-          result.recognizedWords,
-        );
-      }
-    },
-    listenOptions: stt.SpeechListenOptions(
-      localeId: 'de-DE',
-      // DÜZELTME (FIX): confirmation modu her kelimede
-      // duraksıyordu; sesli arama çok geç cevap veriyordu.
-      // dictation modu konuşma bitene kadar kesintisiz dinler.
-      listenMode: stt.ListenMode.dictation,
-    ),
-  );
-}
+      return;
+    }
 
-Future<void> _stopListening() async {
-  await _speech.stop();
+    if (_isListening) {
+      await _stopListening();
+      return;
+    }
 
-  if (!mounted) {
-    return;
+    setState(() {
+      _isListening = true;
+      _voiceText = '';
+    });
+
+    await _speech.listen(
+      onResult: (result) {
+        if (!mounted) {
+          return;
+        }
+
+        setState(() {
+          _voiceText = result.recognizedWords;
+        });
+
+        if (result.finalResult && result.recognizedWords.trim().isNotEmpty) {
+          _processVoiceCommand(
+            result.recognizedWords,
+          );
+        }
+      },
+      listenOptions: stt.SpeechListenOptions(
+        localeId: 'de-DE',
+        // DÜZELTME (FIX): confirmation modu her kelimede
+        // duraksıyordu; sesli arama çok geç cevap veriyordu.
+        // dictation modu konuşma bitene kadar kesintisiz dinler.
+        listenMode: stt.ListenMode.dictation,
+      ),
+    );
   }
 
-  setState(() {
-    _isListening = false;
-  });
-}
+  Future<void> _stopListening() async {
+    await _speech.stop();
 
-Future<void> _processVoiceCommand(
-  String command,
-) async {
-  await _stopListening();
+    if (!mounted) {
+      return;
+    }
 
-  final String text = command.trim();
-
-  if (text.isEmpty) {
-    return;
+    setState(() {
+      _isListening = false;
+    });
   }
 
-  if (!mounted) {
-    return;
+  Future<void> _processVoiceCommand(
+    String command,
+  ) async {
+    await _stopListening();
+
+    final String text = command.trim();
+
+    if (text.isEmpty) {
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _voiceText = text;
+      addressController.text = text;
+    });
+
+    String searchText = text;
+
+    searchText = searchText
+        .replaceAll(
+          RegExp(
+            r'\b(navigasyon|navigation|rota|route|'
+            r'git|g[oö]tür|götür|oluştur|olustur|'
+            r'fahrt|fahren|weiterfahrt|ziel|'
+            r'başlat|baslat|start|los)\b',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .trim();
+
+    searchText = searchText
+        .replaceAll(
+          RegExp(
+            r'\b(kamyon|lkw|truck|otomobil|araba|'
+            r'auto|car|lastkraftwagen|lastwagen)\b',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .trim();
+
+    if (searchText.isEmpty) {
+      searchText = text;
+    }
+
+    await searchAddress(
+      searchText,
+    );
   }
-
-  setState(() {
-    _voiceText = text;
-    addressController.text = text;
-  });
-
-  String searchText = text;
-
-  searchText = searchText
-      .replaceAll(
-        RegExp(
-          r'\b(navigasyon|navigation|rota|route|'
-          r'git|g[oö]tür|götür|oluştur|olustur|'
-          r'fahrt|fahren|weiterfahrt|ziel|'
-          r'başlat|baslat|start|los)\b',
-          caseSensitive: false,
-        ),
-        '',
-      )
-      .trim();
-
-  searchText = searchText
-      .replaceAll(
-        RegExp(
-          r'\b(kamyon|lkw|truck|otomobil|araba|'
-          r'auto|car|lastkraftwagen|lastwagen)\b',
-          caseSensitive: false,
-        ),
-        '',
-      )
-      .trim();
-
-  if (searchText.isEmpty) {
-    searchText = text;
-  }
-
-  await searchAddress(
-    searchText,
-  );
-}
 
 // ============================================================
 // TTS
 // ============================================================
 
-Future<void> _speak(
-  String text,
-) async {
-  try {
-    await _tts.stop();
+  Future<void> _speak(
+    String text,
+  ) async {
+    try {
+      await _tts.stop();
 
-    await _tts.speak(
-      text,
-    );
-  } catch (e) {
-    debugPrint(
-      'TTS ERROR: $e',
-    );
+      await _tts.speak(
+        text,
+      );
+    } catch (e) {
+      debugPrint(
+        'TTS ERROR: $e',
+      );
+    }
   }
-}
 
   // ============================================================
   // KONUM
@@ -1225,16 +1224,6 @@ Future<void> _speak(
       _currentSpeedLimit = 0;
       _truckParkings = <_TruckParking>[];
       _fuelStations = <_FuelStation>[];
-      _truckWeight = 40.0;
-      _truckHeight = 4.0;
-      _truckWidth = 2.55;
-      _truckLength = 16.5;
-      _truckAxleLoad = 11.5;
-      _truckWeight = 40.0;
-      _truckHeight = 4.0;
-      _truckWidth = 2.55;
-      _truckLength = 16.5;
-      _truckAxleLoad = 11.5;
       destination = null;
       addressController.clear();
       _remainingDistance = 0;
@@ -2552,11 +2541,6 @@ Future<void> _speak(
                 'vehicle_type': 'hgv',
                 'profile_params': {
                   'restrictions': {
-                    'height': math.max(_truckHeight, 3.90),
-                    'width': _truckWidth,
-                    'length': _truckLength,
-                    'weight': _truckWeight,
-                    'axleload': _truckAxleLoad,
                     'hazmat': false,
                   },
                 },

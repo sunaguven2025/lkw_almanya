@@ -1169,9 +1169,8 @@ out center;''';
   }
 
   String _orsModifier(dynamic value) {
-    final int? type = value is num
-        ? value.toInt()
-        : int.tryParse(value?.toString() ?? '');
+    final int? type =
+        value is num ? value.toInt() : int.tryParse(value?.toString() ?? '');
 
     switch (type) {
       case 0:
@@ -1271,9 +1270,8 @@ out center;''';
             distance: distance,
             duration: duration,
             location: location,
-            modifier: maneuver is Map
-                ? maneuver['modifier']?.toString() ?? ''
-                : '',
+            modifier:
+                maneuver is Map ? maneuver['modifier']?.toString() ?? '' : '',
           ),
         );
       }
@@ -1868,13 +1866,13 @@ out center;''';
         ) {
           final dynamic item = searchSuggestions[index];
 
-           return ListTile(
-             tileColor: Colors.white,
+          return ListTile(
+            tileColor: Colors.white,
             leading: const Icon(
               Icons.location_on,
               color: AppTheme.primaryBlue,
             ),
-             title: Text(
+            title: Text(
               item['display_name']?.toString() ?? '',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -1882,8 +1880,8 @@ out center;''';
               // sonucu öneri metni silik çıkıyordu. Metin
               // artık opak siyah yazıldı; temadan bağımsız
               // her zaman okunaklı.
-               style: const TextStyle(
-                 color: Colors.black,
+              style: const TextStyle(
+                color: Colors.black,
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
               ),
@@ -2024,8 +2022,8 @@ out center;''';
                 color: routeColor,
                 shape: BoxShape.circle,
               ),
-             child: Icon(
-                 _maneuverIcon(_currentModifier),
+              child: Icon(
+                _maneuverIcon(_currentModifier),
                 color: Colors.white,
                 size: 32,
               ),
@@ -2044,7 +2042,7 @@ out center;''';
                     style: const TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.bold,
-                     color: Colors.black87,
+                      color: Colors.black87,
                     ),
                   ),
                   const SizedBox(
@@ -2221,14 +2219,6 @@ out center;''';
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(
                             color: AppTheme.truckOrange.withValues(alpha: 0.3)),
-                      ),
-                      child: Text(
-                        '🚛 ${_truckWeight.toStringAsFixed(1)}t · ${_truckHeight}m×${_truckWidth}m · ${_truckLength}m',
-                        style: const TextStyle(
-                          color: AppTheme.truckOrange,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
                       ),
                     ),
                 ],
@@ -2695,9 +2685,9 @@ out center;''';
                 return Polyline(
                   points: entry.value,
                   strokeWidth: 4.5,
-                    color: altColors[entry.key % altColors.length].withValues(
-                      alpha: 0.75,
-                    ),
+                  color: altColors[entry.key % altColors.length].withValues(
+                    alpha: 0.75,
+                  ),
                 );
               },
             ).toList(),

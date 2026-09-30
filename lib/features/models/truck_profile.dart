@@ -13,13 +13,23 @@ class TruckProfile {
     required this.axleLoad,
   });
 
-  Map<String, dynamic> toJson() => {
-        'weight': weight,
-        'height': height,
-        'width': width,
-        'length': length,
-        'axleLoad': axleLoad,
-      };
+  static const TruckProfile defaultProfile = TruckProfile(
+    weight: 40.0,
+    height: 4.0,
+    width: 2.55,
+    length: 16.5,
+    axleLoad: 11.5,
+  );
+
+  Map<String, dynamic> toJson() {
+    return {
+      'weight': weight,
+      'height': height,
+      'width': width,
+      'length': length,
+      'axleLoad': axleLoad,
+    };
+  }
 
   factory TruckProfile.fromJson(Map<String, dynamic> json) {
     return TruckProfile(
@@ -30,12 +40,4 @@ class TruckProfile {
       axleLoad: (json['axleLoad'] as num?)?.toDouble() ?? 11.5,
     );
   }
-
-  static const TruckProfile defaultProfile = TruckProfile(
-    weight: 40.0,
-    height: 4.0,
-    width: 2.55,
-    length: 16.5,
-    axleLoad: 11.5,
-  );
 }
