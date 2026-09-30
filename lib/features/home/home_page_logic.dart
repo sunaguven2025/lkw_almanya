@@ -1,3 +1,4 @@
+import '../../services/route_service.dart';
 part of 'home_page.dart';
 
 // setState burada bir extension üzerinden çağrılıyor. Extension'lar Dart'ın

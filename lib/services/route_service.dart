@@ -267,7 +267,7 @@ class RouteService {
       }
 
       final url = Uri.parse(
-        '${_osrmBaseUrl}/driving/$coordinates'
+        '$_osrmBaseUrl/driving/$coordinates'
         '?overview=full'
         '&geometries=geojson'
         '&steps=true'
@@ -311,7 +311,7 @@ class RouteService {
   }) async {
     try {
       final url = Uri.parse(
-        '${_osrmBaseUrl}/driving/'
+        '$_osrmBaseUrl/driving/'
         '${from.longitude},${from.latitude};${to.longitude},${to.latitude}'
         '?overview=full'
         '&geometries=geojson'
