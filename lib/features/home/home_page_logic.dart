@@ -1,4 +1,3 @@
-import '../../services/route_service.dart';
 part of 'home_page.dart';
 
 // setState burada bir extension üzerinden çağrılıyor. Extension'lar Dart'ın
@@ -697,321 +696,266 @@ extension _HomePageLogicX on _HomePageState {
     }
   }
 
-  // ============================================================
-  // SES DİLİ
-  // ============================================================
+ // ============================================================
+// SES DİLİ
+// ============================================================
 
-  Future<void> _changeVoiceLanguage(
-    String language,
-    String name,
-  ) async {
-    try {
-      await _speech.stop();
+Future<void> _changeVoiceLanguage(
+  String language,
+  String name,
+) async {
+  try {
+    await _speech.stop();
 
-      await _tts.stop();
+    await _tts.stop();
 
-      await _tts.isLanguageAvailable(
-        language,
+    await _tts.isLanguageAvailable(
+      language,
+    );
+
+    await _tts.setLanguage(
+      language,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _voiceLanguage = language;
+      _voiceLanguageName = name;
+      _isListening = false;
+    });
+
+    String message;
+
+    if (language == 'de-DE') {
+      message = 'Die Sprache wurde auf Deutsch eingestellt.';
+    } else {
+      message = 'Die Sprache wurde auf Deutsch eingestellt.';
+    }
+
+    await _speak(
+      message,
+    );
+  } catch (e) {
+    debugPrint(
+      'VOICE LANGUAGE ERROR: $e',
+    );
+
+    _showRouteError(
+      'Ses dili değiştirilemedi.',
+    );
+  }
+}
+
+// ============================================================
+// SES DİLİ SEÇİCİ (Bottom Sheet)
+// ============================================================
+
+void _showVoiceLanguageSelector() {
+  showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (BuildContext sheetContext) {
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.only(
+            left: 16,
+            right: 16,
+            bottom: 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Sesli Navigasyon Dili',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(
+                height: 12,
+              ),
+              ListTile(
+                leading: const Text(
+                  '🇩🇪',
+                  style: TextStyle(
+                    fontSize: 28,
+                  ),
+                ),
+                title: const Text(
+                  'Deutsch',
+                ),
+                trailing: _voiceLanguage == 'de-DE'
+                    ? const Icon(
+                        Icons.check,
+                        color: Colors.green,
+                      )
+                    : null,
+                onTap: () {
+                  Navigator.pop(
+                    sheetContext,
+                  );
+
+                  _changeVoiceLanguage(
+                    'de-DE',
+                    'Deutsch',
+                  );
+                },
+              ),
+            ],
+          ),
+        );
       );
+    },
+  );
+}
 
-      await _tts.setLanguage(
-        language,
-      );
+// ============================================================
+// SESLİ KOMUT
+// ============================================================
 
+Future<void> _startListening() async {
+  if (!_speechAvailable) {
+    await _initializeVoice();
+  }
+
+  if (!_speechAvailable) {
+    if (!mounted) {
+      return;
+    }
+
+    _showRouteError(
+      'Sesli komut kullanılamıyor. Mikrofon iznini kontrol edin.',
+    );
+
+    return;
+  }
+
+  if (_isListening) {
+    await _stopListening();
+    return;
+  }
+
+  setState(() {
+    _isListening = true;
+    _voiceText = '';
+  });
+
+  await _speech.listen(
+    onResult: (result) {
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _voiceLanguage = language;
-        _voiceLanguageName = name;
-        _isListening = false;
+        _voiceText = result.recognizedWords;
       });
 
-      String message;
-
-      if (language == 'tr-TR') {
-        message = 'Ses dili Türkçe olarak ayarlandı.';
-      } else if (language == 'en-US') {
-        message = 'Voice language changed to English.';
-      } else {
-        message = 'Die Sprache wurde auf Deutsch eingestellt.';
-      }
-
-      await _speak(
-        message,
-      );
-    } catch (e) {
-      debugPrint(
-        'VOICE LANGUAGE ERROR: $e',
-      );
-
-      _showRouteError(
-        'Ses dili değiştirilemedi.',
-      );
-    }
-  }
-
-  // ============================================================
-  // SES DİLİ SEÇİCİ (Bottom Sheet)
-  // ============================================================
-
-  void _showVoiceLanguageSelector() {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (BuildContext sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.only(
-              left: 16,
-              right: 16,
-              bottom: 20,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Sesli Navigasyon Dili',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(
-                  height: 12,
-                ),
-                ListTile(
-                  leading: const Text(
-                    '🇹🇷',
-                    style: TextStyle(
-                      fontSize: 28,
-                    ),
-                  ),
-                  title: const Text(
-                    'Türkçe',
-                  ),
-                  trailing: _voiceLanguage == 'tr-TR'
-                      ? const Icon(
-                          Icons.check,
-                          color: Colors.green,
-                        )
-                      : null,
-                  onTap: () {
-                    Navigator.pop(
-                      sheetContext,
-                    );
-
-                    _changeVoiceLanguage(
-                      'tr-TR',
-                      'Türkçe',
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Text(
-                    '🇩🇪',
-                    style: TextStyle(
-                      fontSize: 28,
-                    ),
-                  ),
-                  title: const Text(
-                    'Deutsch',
-                  ),
-                  trailing: _voiceLanguage == 'de-DE'
-                      ? const Icon(
-                          Icons.check,
-                          color: Colors.green,
-                        )
-                      : null,
-                  onTap: () {
-                    Navigator.pop(
-                      sheetContext,
-                    );
-
-                    _changeVoiceLanguage(
-                      'de-DE',
-                      'Deutsch',
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Text(
-                    '🇬🇧',
-                    style: TextStyle(
-                      fontSize: 28,
-                    ),
-                  ),
-                  title: const Text(
-                    'English',
-                  ),
-                  trailing: _voiceLanguage == 'en-US'
-                      ? const Icon(
-                          Icons.check,
-                          color: Colors.green,
-                        )
-                      : null,
-                  onTap: () {
-                    Navigator.pop(
-                      sheetContext,
-                    );
-
-                    _changeVoiceLanguage(
-                      'en-US',
-                      'English',
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
+      if (result.finalResult && result.recognizedWords.trim().isNotEmpty) {
+        _processVoiceCommand(
+          result.recognizedWords,
         );
-      },
-    );
-  }
-
-  // ============================================================
-  // SESLİ KOMUT
-  // ============================================================
-
-  Future<void> _startListening() async {
-    if (!_speechAvailable) {
-      await _initializeVoice();
-    }
-
-    if (!_speechAvailable) {
-      if (!mounted) {
-        return;
       }
+    },
+    listenOptions: stt.SpeechListenOptions(
+      localeId: 'de-DE',
+      // DÜZELTME (FIX): confirmation modu her kelimede
+      // duraksıyordu; sesli arama çok geç cevap veriyordu.
+      // dictation modu konuşma bitene kadar kesintisiz dinler.
+      listenMode: stt.ListenMode.dictation,
+    ),
+  );
+}
 
-      _showRouteError(
-        'Sesli komut kullanılamıyor. Mikrofon iznini kontrol edin.',
-      );
+Future<void> _stopListening() async {
+  await _speech.stop();
 
-      return;
-    }
+  if (!mounted) {
+    return;
+  }
 
-    if (_isListening) {
-      await _stopListening();
-      return;
-    }
+  setState(() {
+    _isListening = false;
+  });
+}
 
-    setState(() {
-      _isListening = true;
-      _voiceText = '';
-    });
+Future<void> _processVoiceCommand(
+  String command,
+) async {
+  await _stopListening();
 
-    await _speech.listen(
-      onResult: (result) {
-        if (!mounted) {
-          return;
-        }
+  final String text = command.trim();
 
-        setState(() {
-          _voiceText = result.recognizedWords;
-        });
+  if (text.isEmpty) {
+    return;
+  }
 
-        if (result.finalResult && result.recognizedWords.trim().isNotEmpty) {
-          _processVoiceCommand(
-            result.recognizedWords,
-          );
-        }
-      },
-      listenOptions: stt.SpeechListenOptions(
-        localeId: _voiceLanguage,
-        // DÜZELTME (FIX): confirmation modu her kelimede
-        // duraksıyordu; sesli arama çok geç cevap veriyordu.
-        // dictation modu konuşma bitene kadar kesintisiz dinler.
-        listenMode: stt.ListenMode.dictation,
-      ),
+  if (!mounted) {
+    return;
+  }
+
+  setState(() {
+    _voiceText = text;
+    addressController.text = text;
+  });
+
+  String searchText = text;
+
+  searchText = searchText
+      .replaceAll(
+        RegExp(
+          r'\b(navigasyon|navigation|rota|route|'
+          r'git|g[oö]tür|götür|oluştur|olustur|'
+          r'fahrt|fahren|weiterfahrt|ziel|'
+          r'başlat|baslat|start|los)\b',
+          caseSensitive: false,
+        ),
+        '',
+      )
+      .trim();
+
+  searchText = searchText
+      .replaceAll(
+        RegExp(
+          r'\b(kamyon|lkw|truck|otomobil|araba|'
+          r'auto|car|lastkraftwagen|lastwagen)\b',
+          caseSensitive: false,
+        ),
+        '',
+      )
+      .trim();
+
+  if (searchText.isEmpty) {
+    searchText = text;
+  }
+
+  await searchAddress(
+    searchText,
+  );
+}
+
+// ============================================================
+// TTS
+// ============================================================
+
+Future<void> _speak(
+  String text,
+) async {
+  try {
+    await _tts.stop();
+
+    await _tts.speak(
+      text,
+    );
+  } catch (e) {
+    debugPrint(
+      'TTS ERROR: $e',
     );
   }
-
-  Future<void> _stopListening() async {
-    await _speech.stop();
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _isListening = false;
-    });
-  }
-
-  Future<void> _processVoiceCommand(
-    String command,
-  ) async {
-    await _stopListening();
-
-    final String text = command.trim();
-
-    if (text.isEmpty) {
-      return;
-    }
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _voiceText = text;
-      addressController.text = text;
-    });
-
-    String searchText = text;
-
-    searchText = searchText
-        .replaceAll(
-          RegExp(
-            r'\b(navigasyon|navigation|rota|route|'
-            r'git|g[oö]tür|götür|oluştur|olustur|'
-            r'başlat|baslat)\b',
-            caseSensitive: false,
-          ),
-          '',
-        )
-        .trim();
-
-    searchText = searchText
-        .replaceAll(
-          RegExp(
-            r'\b(kamyon|lkw|truck|otomobil|araba|'
-            r'auto|car)\b',
-            caseSensitive: false,
-          ),
-          '',
-        )
-        .trim();
-
-    if (searchText.isEmpty) {
-      searchText = text;
-    }
-
-    await searchAddress(
-      searchText,
-    );
-  }
-
-  // ============================================================
-  // TTS
-  // ============================================================
-
-  Future<void> _speak(
-    String text,
-  ) async {
-    try {
-      await _tts.stop();
-
-      await _tts.speak(
-        text,
-      );
-    } catch (e) {
-      debugPrint(
-        'TTS ERROR: $e',
-      );
-    }
-  }
+}
 
   // ============================================================
   // KONUM

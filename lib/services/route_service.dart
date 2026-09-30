@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart'; // ← YENİ
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
@@ -164,7 +165,7 @@ class RouteResult {
         try {
           steps.add(RouteStep.fromJson(step as Map<String, dynamic>));
         } catch (e) {
-          print('Step parsing error: $e');
+          debugPrint('Step parsing error: $e');
         }
       }
     }
@@ -215,7 +216,7 @@ class RouteService {
         '&continue_straight=default',
       );
 
-      print('🗺️ Route URL: $url');
+      debugPrint('🗺️ Route URL: $url');
 
       // İstek gönder
       final response = await http.get(url).timeout(_timeout);
@@ -235,13 +236,13 @@ class RouteService {
 
       final routeResult = RouteResult.fromJson(data);
 
-      print(
+      debugPrint(
         '✅ Rota hesaplandı: ${routeResult.distanceKm}, ${routeResult.durationFormatted}',
       );
 
       return routeResult;
     } catch (e) {
-      print('❌ Rota hesaplama hatası: $e');
+      debugPrint('❌ Rota hesaplama hatası: $e');
       rethrow;
     }
   }
@@ -274,7 +275,7 @@ class RouteService {
         '&continue_straight=default',
       );
 
-      print('🗺️ Multi-stop URL: $url');
+      debugPrint('🗺️ Multi-stop URL: $url');
 
       final response = await http.get(url).timeout(_timeout);
 
@@ -292,13 +293,13 @@ class RouteService {
 
       final routeResult = RouteResult.fromJson(data);
 
-      print(
+      debugPrint(
         '✅ Çoklu rota hesaplandı: ${stops.length} durak, ${routeResult.distanceKm}',
       );
 
       return routeResult;
     } catch (e) {
-      print('❌ Çoklu rota hatası: $e');
+      debugPrint('❌ Çoklu rota hatası: $e');
       rethrow;
     }
   }
@@ -319,7 +320,7 @@ class RouteService {
         '&alternatives=2',
       );
 
-      print('🗺️ Alternative routes URL: $url');
+      debugPrint('🗺️ Alternative routes URL: $url');
 
       final response = await http.get(url).timeout(_timeout);
 
@@ -340,11 +341,11 @@ class RouteService {
               }))
           .toList();
 
-      print('✅ ${results.length} alternatif rota bulundu');
+      debugPrint('✅ ${results.length} alternatif rota bulundu');
 
       return results;
     } catch (e) {
-      print('❌ Alternatif rota hatası: $e');
+      debugPrint('❌ Alternatif rota hatası: $e');
       rethrow;
     }
   }
