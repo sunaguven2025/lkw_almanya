@@ -16,6 +16,9 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../services/route_service.dart';
 import '../../theme/app_theme.dart';
+import 'models/truck_profile.dart';
+import 'services/truck_profile_storage.dart';
+import 'widgets/truck_profile_sheet.dart';
 
 part 'home_page_logic.dart';
 part 'home_page_ui.dart';
@@ -228,10 +231,18 @@ class _NavigationInstruction {
 
 class _HomePageState extends State<HomePage> {
   // ============================================================
-  // ROUTE SERVICE (YENİ)
+  // ROUTE SERVICE
   // ============================================================
 
   late RouteService _routeService;
+
+  // ============================================================
+  // TRUCK PROFILE
+  // ============================================================
+
+  final TruckProfileStorage _truckProfileStorage = TruckProfileStorage();
+
+  TruckProfile _truckProfile = TruckProfile.defaultProfile;
 
   // ============================================================
   // HARİTA
@@ -337,16 +348,6 @@ class _HomePageState extends State<HomePage> {
   // KAMYON TONAJ SINIFI
   // ============================================================
 
-  double _truckWeight = 40.0;
-
-  double _truckHeight = 4.0;
-
-  double _truckWidth = 2.55;
-
-  double _truckLength = 16.5;
-
-  double _truckAxleLoad = 11.5;
-
   List<_RouteStop> _stops = <_RouteStop>[];
 
   static const String _historyStorageKey = 'lkw_route_history';
@@ -403,8 +404,11 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
 
-    // RouteService initialize et
     _routeService = RouteService();
+
+    selectedVehicle = 'truck';
+
+    _loadTruckProfile();
 
     loadLocation();
 
@@ -451,6 +455,13 @@ class _HomePageState extends State<HomePage> {
                 'LKW Almanya Navigasyon',
               ),
               actions: [
+                IconButton(
+                  tooltip: 'Kamyon profili',
+                  icon: const Icon(
+                    Icons.local_shipping,
+                  ),
+                  onPressed: _openTruckProfileSheet,
+                ),
                 IconButton(
                   tooltip: 'Yerler / Favoriler',
                   icon: const Icon(
@@ -513,6 +524,57 @@ class _HomePageState extends State<HomePage> {
                 _buildMapControls(),
               ],
             ),
+    );
+  }
+
+  // ============================================================
+  // TRUCK PROFILE METHODS
+  // ============================================================
+
+  Future<void> _loadTruckProfile() async {
+    try {
+      final profile = await _truckProfileStorage.load();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _truckProfile = profile;
+      });
+    } catch (e) {
+      debugPrint('TRUCK PROFILE LOAD ERROR: $e');
+    }
+  }
+
+  Future<void> _openTruckProfileSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (BuildContext modalContext) {
+        return TruckProfileSheet(
+          profile: _truckProfile,
+          onSaved: (profile) async {
+            _truckProfile = profile;
+
+            await _truckProfileStorage.save(profile);
+
+            if (!mounted) {
+              return;
+            }
+
+            setState(() {});
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Kamyon profili kaydedildi.'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
