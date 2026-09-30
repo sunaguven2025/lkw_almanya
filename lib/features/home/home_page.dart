@@ -234,7 +234,7 @@ class _HomePageState extends State<HomePage> {
   // ROUTE SERVICE
   // ============================================================
 
-  late RouteService _routeService;
+  //late RouteService _routeService;
 
   // ============================================================
   // TRUCK PROFILE
