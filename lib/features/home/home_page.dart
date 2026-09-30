@@ -404,7 +404,7 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
 
-    _routeService = RouteService();
+    //_routeService = RouteService();
 
     selectedVehicle = 'truck';
 
