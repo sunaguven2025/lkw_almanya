@@ -1,3 +1,4 @@
+// ignore_for_file: curly_braces_in_flow_control_structures
 part of 'home_page.dart';
 
 // setState burada bir extension üzerinden çağrılıyor. Extension'lar Dart'ın
