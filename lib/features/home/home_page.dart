@@ -14,7 +14,6 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../services/route_service.dart';
 import '../../theme/app_theme.dart';
 import '../models/truck_profile.dart';
 import '../services/truck_profile_storage.dart';
