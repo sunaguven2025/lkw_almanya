@@ -14,6 +14,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../services/route_service.dart';
 import '../../theme/app_theme.dart';
 
 part 'home_page_logic.dart';
@@ -227,6 +228,12 @@ class _NavigationInstruction {
 
 class _HomePageState extends State<HomePage> {
   // ============================================================
+  // ROUTE SERVICE (YENİ)
+  // ============================================================
+
+  late RouteService _routeService;
+
+  // ============================================================
   // HARİTA
   // ============================================================
 
@@ -395,6 +402,9 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+
+    // RouteService initialize et
+    _routeService = RouteService();
 
     loadLocation();
 
