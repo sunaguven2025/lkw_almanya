@@ -15,7 +15,7 @@
         android:label="lkw_almanya"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">   <!-- EKLENEN SATIR -->
+        >
 
         <activity
             android:name=".MainActivity"
@@ -47,6 +47,16 @@
 
     <!-- Flutter text processing -->
     <queries>
+        <!-- Android 11+ cihazlarda flutter_tts ses motorlarını
+             sorgulayabilmek için gereklidir. -->
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE"/>
+        </intent>
+        <!-- Android 11+ cihazlarda speech_to_text konuşma tanıma
+             servislerini bulabilmek için gereklidir. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
