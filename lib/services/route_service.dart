@@ -194,7 +194,7 @@ class RouteService {
   }) async {
     try {
       // Rota modu (araç türüne göre)
-      final profileMode = profile.type == 'truck' ? 'driving' : 'driving';
+      final profileMode = profile.type == 'truck' ? 'driving-hgv' : 'driving';
 
       // Koordinatlar
       String coordinates =

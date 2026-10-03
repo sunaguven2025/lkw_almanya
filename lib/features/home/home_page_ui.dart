@@ -1,9 +1,3 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
-import 'dart:math' as math;
-import '../../services/offline_map_service.dart';
-import '../../../theme/app_theme.dart'; // eğer AppTheme kullanıyorsan
 // ignore_for_file: curly_braces_in_flow_control_structures
 part of 'home_page.dart';
 
@@ -1384,14 +1378,9 @@ out center;''';
   // ÇOKLU DİL
   // ============================================================
 
-  String _localizedText(
-    String en,
-    String de,
-  ) {
-    if (_voiceLanguage == 'en-US') {
-      return en;
-    }
-
+  String _localizedText(String tr, String en, String de) {
+    if (_voiceLanguage == 'tr-TR') return tr;
+    if (_voiceLanguage == 'en-US') return en;
     return de;
   }
 
@@ -2250,662 +2239,602 @@ out center;''';
 // HARİTA KONTROLLERİ
 // ============================================================
 
-Widget _labeledControlButton({
-  required String heroTag,
-  required IconData icon,
-  required String label,
-  required VoidCallback onPressed,
-  bool active = false,
-  Color activeColor = AppTheme.primaryBlue,
-}) {
-  final Color bg = active ? activeColor : Colors.white;
-  final Color fg = active ? Colors.white : Colors.black87;
+  Widget _labeledControlButton({
+    required String heroTag,
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+    bool active = false,
+    Color activeColor = AppTheme.primaryBlue,
+  }) {
+    final Color bg = active ? activeColor : Colors.white;
+    final Color fg = active ? Colors.white : Colors.black87;
 
-  return Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Material(
-      color: bg,
-      elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(22),
-        side: BorderSide(
-          color: active ? activeColor : Colors.grey.shade400,
-          width: 1.2,
-        ),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(22),
-        onTap: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 10,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: fg, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  color: fg,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-Widget _primaryControlButton({
-  required String heroTag,
-  required IconData icon,
-  required String tooltip,
-  required VoidCallback onPressed,
-  bool active = false,
-  double size = 40,
-}) {
-  return Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Tooltip(
-      message: tooltip,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: active ? AppTheme.primaryBlue : Colors.white,
-        shape: CircleBorder(
+        color: bg,
+        elevation: 3,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
           side: BorderSide(
-            color: active ? AppTheme.primaryBlue : Colors.grey.shade400,
+            color: active ? activeColor : Colors.grey.shade400,
             width: 1.2,
           ),
         ),
-        elevation: 3,
         child: InkWell(
-          customBorder: const CircleBorder(),
+          borderRadius: BorderRadius.circular(22),
           onTap: onPressed,
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: Icon(
-              icon,
-              size: 20,
-              color: active ? Colors.white : Colors.black87,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 10,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: fg, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: fg,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
-Widget _buildMapControls() {
-  return Positioned(
-    right: 15,
-    bottom: _navigationStarted ? 125 : 20,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        // İKİNCİL MENÜ (açılır/kapanır)
-        if (_showMoreControls)
-          Container(
-            constraints: const BoxConstraints(maxHeight: 340),
-            margin: const EdgeInsets.only(bottom: 4),
-            child: SingleChildScrollView(
-              reverse: true,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  _labeledControlButton(
-                    heroTag: 'favorites',
-                    icon: Icons.bookmarks,
-                    label: 'Favoriler',
-                    onPressed: _showFavorites,
-                  ),
-                  _labeledControlButton(
-                    heroTag: 'save_location',
-                    icon: Icons.add_location_alt,
-                    label: 'Konumu Kaydet',
-                    onPressed: _saveCurrentLocationAsFavorite,
-                  ),
-                  _labeledControlButton(
-                    heroTag: 'voice_language',
-                    icon: Icons.translate,
-                    label: 'Ses: $_voiceLanguageName',
-                    onPressed: _showVoiceLanguageSelector,
-                  ),
-                  _labeledControlButton(
-                    heroTag: 'restrictions',
-                    icon: _showRestrictions
-                        ? Icons.warning_amber
-                        : Icons.warning_amber_outlined,
-                    label: 'Kısıtlamalar',
-                    active: _showRestrictions,
-                    activeColor: Colors.orange.shade800,
-                    onPressed: () {
-                      setState(() {
-                        _showRestrictions = !_showRestrictions;
-                      });
-                    },
-                  ),
-                  _labeledControlButton(
-                    heroTag: 'truck_parkings',
-                    icon: _showTruckParkings
-                        ? Icons.local_shipping
-                        : Icons.local_shipping_outlined,
-                    label: 'TIR Parkları',
-                    active: _showTruckParkings,
-                    activeColor: Colors.green.shade700,
-                    onPressed: () {
-                      setState(() {
-                        _showTruckParkings = !_showTruckParkings;
-                      });
-                    },
-                  ),
-                  _labeledControlButton(
-                    heroTag: 'fuel_stations',
-                    icon: _showFuelStations
-                        ? Icons.local_gas_station
-                        : Icons.local_gas_station_outlined,
-                    label: 'Yakıt İstasyonları',
-                    active: _showFuelStations,
-                    activeColor: Colors.blue.shade700,
-                    onPressed: () {
-                      setState(() {
-                        _showFuelStations = !_showFuelStations;
-                      });
-                    },
-                  ),
-                  _labeledControlButton(
-                    heroTag: 'stops',
-                    icon: Icons.flag,
-                    label: stops.isEmpty
-                        ? 'Duraklar'
-                        : 'Duraklar (${stops.length})',
-                    onPressed: _showStopsManager,
-                  ),
-                  _labeledControlButton(
-                    heroTag: 'dark_mode',
-                    icon: _isDarkMode ? Icons.wb_sunny : Icons.nights_stay,
-                    label: _isDarkMode ? 'Gündüz Modu' : 'Gece Modu',
-                    active: _isDarkMode,
-                    activeColor: Colors.indigo,
-                    onPressed: _toggleDarkMode,
-                  ),
-                  _labeledControlButton(
-                    heroTag: 'share',
-                    icon: Icons.share,
-                    label: 'Rotayı Paylaş',
-                    onPressed: _shareRoute,
-                  ),
-                  _labeledControlButton(
-                    heroTag: 'history',
-                    icon: Icons.history,
-                    label: 'Rota Geçmişi',
-                    onPressed: _showRouteHistory,
-                  ),
-                ],
+  Widget _primaryControlButton({
+    required String heroTag,
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+    bool active = false,
+    double size = 40,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Tooltip(
+        message: tooltip,
+        child: Material(
+          color: active ? AppTheme.primaryBlue : Colors.white,
+          shape: CircleBorder(
+            side: BorderSide(
+              color: active ? AppTheme.primaryBlue : Colors.grey.shade400,
+              width: 1.2,
+            ),
+          ),
+          elevation: 3,
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onPressed,
+            child: SizedBox(
+              width: size,
+              height: size,
+              child: Icon(
+                icon,
+                size: 20,
+                color: active ? Colors.white : Colors.black87,
               ),
             ),
           ),
-
-        // DAHA FAZLA / KAPAT
-        _primaryControlButton(
-          heroTag: 'more_controls',
-          icon: _showMoreControls ? Icons.close : Icons.more_horiz,
-          tooltip: _showMoreControls ? 'Menüyü kapat' : 'Diğer seçenekler',
-          active: _showMoreControls,
-          onPressed: () {
-            setState(() {
-              _showMoreControls = !_showMoreControls;
-            });
-          },
         ),
+      ),
+    );
+  }
 
-        const SizedBox(height: 6),
-
-        // YAKINLAŞTIR / UZAKLAŞTIR
-        _primaryControlButton(
-          heroTag: 'zoom_in',
-          icon: Icons.add,
-          tooltip: 'Yakınlaştır',
-          onPressed: () {
-            mapController.move(
-              mapController.camera.center,
-              mapController.camera.zoom + 1,
-            );
-          },
-        ),
-        _primaryControlButton(
-          heroTag: 'zoom_out',
-          icon: Icons.remove,
-          tooltip: 'Uzaklaştır',
-          onPressed: () {
-            mapController.move(
-              mapController.camera.center,
-              mapController.camera.zoom - 1,
-            );
-          },
-        ),
-
-        // YÖN BUTONU
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Tooltip(
-            message: _navigationMode ? 'Kuzey yukarı' : 'Sürüş yönü yukarı',
-            child: Material(
-              color: _navigationMode ? AppTheme.primaryBlue : Colors.white,
-              shape: CircleBorder(
-                side: BorderSide(
-                  color: _navigationMode
-                      ? AppTheme.primaryBlue
-                      : Colors.grey.shade400,
-                  width: 1.2,
+  Widget _buildMapControls() {
+    return Positioned(
+      right: 15,
+      bottom: _navigationStarted ? 125 : 20,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // İKİNCİL MENÜ (açılır/kapanır)
+          if (_showMoreControls)
+            Container(
+              constraints: const BoxConstraints(maxHeight: 340),
+              margin: const EdgeInsets.only(bottom: 4),
+              child: SingleChildScrollView(
+                reverse: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    _labeledControlButton(
+                      heroTag: 'favorites',
+                      icon: Icons.bookmarks,
+                      label: 'Favoriler',
+                      onPressed: _showFavorites,
+                    ),
+                    _labeledControlButton(
+                      heroTag: 'save_location',
+                      icon: Icons.add_location_alt,
+                      label: 'Konumu Kaydet',
+                      onPressed: _saveCurrentLocationAsFavorite,
+                    ),
+                    _labeledControlButton(
+                      heroTag: 'voice_language',
+                      icon: Icons.translate,
+                      label: 'Ses: $_voiceLanguageName',
+                      onPressed: _showVoiceLanguageSelector,
+                    ),
+                    _labeledControlButton(
+                      heroTag: 'restrictions',
+                      icon: _showRestrictions
+                          ? Icons.warning_amber
+                          : Icons.warning_amber_outlined,
+                      label: 'Kısıtlamalar',
+                      active: _showRestrictions,
+                      activeColor: Colors.orange.shade800,
+                      onPressed: () {
+                        setState(() {
+                          _showRestrictions = !_showRestrictions;
+                        });
+                      },
+                    ),
+                    _labeledControlButton(
+                      heroTag: 'truck_parkings',
+                      icon: _showTruckParkings
+                          ? Icons.local_shipping
+                          : Icons.local_shipping_outlined,
+                      label: 'TIR Parkları',
+                      active: _showTruckParkings,
+                      activeColor: Colors.green.shade700,
+                      onPressed: () {
+                        setState(() {
+                          _showTruckParkings = !_showTruckParkings;
+                        });
+                      },
+                    ),
+                    _labeledControlButton(
+                      heroTag: 'fuel_stations',
+                      icon: _showFuelStations
+                          ? Icons.local_gas_station
+                          : Icons.local_gas_station_outlined,
+                      label: 'Yakıt İstasyonları',
+                      active: _showFuelStations,
+                      activeColor: Colors.blue.shade700,
+                      onPressed: () {
+                        setState(() {
+                          _showFuelStations = !_showFuelStations;
+                        });
+                      },
+                    ),
+                    _labeledControlButton(
+                      heroTag: 'stops',
+                      icon: Icons.flag,
+                      label: stops.isEmpty
+                          ? 'Duraklar'
+                          : 'Duraklar (${stops.length})',
+                      onPressed: _showStopsManager,
+                    ),
+                    _labeledControlButton(
+                      heroTag: 'dark_mode',
+                      icon: _isDarkMode ? Icons.wb_sunny : Icons.nights_stay,
+                      label: _isDarkMode ? 'Gündüz Modu' : 'Gece Modu',
+                      active: _isDarkMode,
+                      activeColor: Colors.indigo,
+                      onPressed: _toggleDarkMode,
+                    ),
+                    _labeledControlButton(
+                      heroTag: 'share',
+                      icon: Icons.share,
+                      label: 'Rotayı Paylaş',
+                      onPressed: _shareRoute,
+                    ),
+                    _labeledControlButton(
+                      heroTag: 'history',
+                      icon: Icons.history,
+                      label: 'Rota Geçmişi',
+                      onPressed: _showRouteHistory,
+                    ),
+                  ],
                 ),
               ),
-              elevation: 3,
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: _toggleNavigationMode,
-                child: SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: Transform.rotate(
-                    angle: _navigationMode
-                        ? 0
-                        : _currentHeading * math.pi / 180,
-                    child: Icon(
-                      Icons.navigation,
-                      size: 20,
-                      color:
-                          _navigationMode ? Colors.white : Colors.black87,
+            ),
+
+          // DAHA FAZLA / KAPAT
+          _primaryControlButton(
+            heroTag: 'more_controls',
+            icon: _showMoreControls ? Icons.close : Icons.more_horiz,
+            tooltip: _showMoreControls ? 'Menüyü kapat' : 'Diğer seçenekler',
+            active: _showMoreControls,
+            onPressed: () {
+              setState(() {
+                _showMoreControls = !_showMoreControls;
+              });
+            },
+          ),
+
+          const SizedBox(height: 6),
+
+          // YAKINLAŞTIR / UZAKLAŞTIR
+          _primaryControlButton(
+            heroTag: 'zoom_in',
+            icon: Icons.add,
+            tooltip: 'Yakınlaştır',
+            onPressed: () {
+              mapController.move(
+                mapController.camera.center,
+                mapController.camera.zoom + 1,
+              );
+            },
+          ),
+          _primaryControlButton(
+            heroTag: 'zoom_out',
+            icon: Icons.remove,
+            tooltip: 'Uzaklaştır',
+            onPressed: () {
+              mapController.move(
+                mapController.camera.center,
+                mapController.camera.zoom - 1,
+              );
+            },
+          ),
+
+          // YÖN BUTONU
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Tooltip(
+              message: _navigationMode ? 'Kuzey yukarı' : 'Sürüş yönü yukarı',
+              child: Material(
+                color: _navigationMode ? AppTheme.primaryBlue : Colors.white,
+                shape: CircleBorder(
+                  side: BorderSide(
+                    color: _navigationMode
+                        ? AppTheme.primaryBlue
+                        : Colors.grey.shade400,
+                    width: 1.2,
+                  ),
+                ),
+                elevation: 3,
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: _toggleNavigationMode,
+                  child: SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: Transform.rotate(
+                      angle:
+                          _navigationMode ? 0 : _currentHeading * math.pi / 180,
+                      child: Icon(
+                        Icons.navigation,
+                        size: 20,
+                        color: _navigationMode ? Colors.white : Colors.black87,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
 
-        const SizedBox(height: 4),
+          const SizedBox(height: 4),
 
-        // KONUMUM (ana buton)
-        FloatingActionButton(
-          heroTag: 'my_location',
-          tooltip: 'Konumum / Navigasyonu takip et',
-          backgroundColor: AppTheme.primaryBlue,
-          foregroundColor: Colors.white,
-          shape: const CircleBorder(
-            side: BorderSide(color: Colors.white, width: 2),
+          // KONUMUM (ana buton)
+          FloatingActionButton(
+            heroTag: 'my_location',
+            tooltip: 'Konumum / Navigasyonu takip et',
+            backgroundColor: AppTheme.primaryBlue,
+            foregroundColor: Colors.white,
+            shape: const CircleBorder(
+              side: BorderSide(color: Colors.white, width: 2),
+            ),
+            onPressed: () {
+              if (userLocation == null) {
+                loadLocation();
+                return;
+              }
+
+              setState(() {
+                _isFollowingLocation = true;
+              });
+
+              _moveMapWithDirection(
+                userLocation!,
+                _currentHeading,
+              );
+            },
+            child: const Icon(Icons.my_location),
           ),
-          onPressed: () {
-            if (userLocation == null) {
-              loadLocation();
-              return;
-            }
-
-            setState(() {
-              _isFollowingLocation = true;
-            });
-
-            _moveMapWithDirection(
-              userLocation!,
-              _currentHeading,
-            );
-          },
-          child: const Icon(Icons.my_location),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 
 // ============================================================
 // HARİTA
 // ============================================================
 
-Widget _buildMap() {
-  if (userLocation == null) {
-    return const Center(
-      child: CircularProgressIndicator(),
-    );
-  }
+  Widget _buildMap() {
+    if (userLocation == null) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
 
-  return Stack(
-    children: [
-      FlutterMap(
-        mapController: mapController,
-        options: MapOptions(
-          initialCenter: userLocation!,
-          initialZoom: 13.0,
-          interactionOptions: const InteractionOptions(
-            flags: InteractiveFlag.all,
-          ),
-          onTap: (TapPosition tapPosition, LatLng point) {
-            setState(() {
-              _isFollowingLocation = false;
-            });
-            selectMapPoint(point);
-          },
-          onLongPress: (TapPosition tapPosition, LatLng point) async {
-            final TextEditingController stopNameController =
-                TextEditingController();
-            final bool? add = await showDialog<bool>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Durak Ekle'),
-                content: TextField(
-                  controller: stopNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Durak adı',
-                    hintText: 'Örn: Depo, Müşteri',
+    return Stack(
+      children: [
+        FlutterMap(
+          mapController: mapController,
+          options: MapOptions(
+            initialCenter: userLocation!,
+            initialZoom: 13.0,
+            interactionOptions: const InteractionOptions(
+              flags: InteractiveFlag.all,
+            ),
+            onTap: (TapPosition tapPosition, LatLng point) {
+              setState(() {
+                _isFollowingLocation = false;
+              });
+              selectMapPoint(point);
+            },
+            onLongPress: (TapPosition tapPosition, LatLng point) async {
+              final TextEditingController stopNameController =
+                  TextEditingController();
+              final bool? add = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Durak Ekle'),
+                  content: TextField(
+                    controller: stopNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Durak adı',
+                      hintText: 'Örn: Depo, Müşteri',
+                    ),
                   ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('İptal'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Ekle'),
+                    ),
+                  ],
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx, false),
-                    child: const Text('İptal'),
+              );
+              if (add == true && mounted) {
+                await _addStop(
+                  point,
+                  stopNameController.text.trim(),
+                  '${point.latitude.toStringAsFixed(5)}, ${point.longitude.toStringAsFixed(5)}',
+                );
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      '${stopNameController.text.trim()} durak olarak eklendi.',
+                    ),
                   ),
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(ctx, true),
-                    child: const Text('Ekle'),
+                );
+              }
+              stopNameController.dispose();
+            },
+          ),
+          children: [
+            OfflineMapService.tileLayer(),
+
+            // ALTERNATİF ROTALAR
+            if (alternativeRoutePoints.isNotEmpty)
+              PolylineLayer(
+                polylines: alternativeRoutePoints.asMap().entries.map(
+                  (MapEntry<int, List<LatLng>> entry) {
+                    final List<Color> altColors = [
+                      Colors.teal,
+                      Colors.purple,
+                      Colors.orange,
+                    ];
+                    return Polyline(
+                      points: entry.value,
+                      strokeWidth: 4.5,
+                      color: altColors[entry.key % altColors.length]
+                          .withValues(alpha: 0.75),
+                    );
+                  },
+                ).toList(),
+              ),
+
+            // ANA ROTA
+            if (routePoints.isNotEmpty)
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: routePoints,
+                    strokeWidth: 5.0,
+                    color: routeColor,
                   ),
                 ],
               ),
-            );
-            if (add == true && mounted) {
-              await _addStop(
-                point,
-                stopNameController.text.trim(),
-                '${point.latitude.toStringAsFixed(5)}, ${point.longitude.toStringAsFixed(5)}',
-              );
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    '${stopNameController.text.trim()} durak olarak eklendi.',
-                  ),
-                ),
-              );
-            }
-            stopNameController.dispose();
-          },
-        ),
-        children: [
-          OfflineMapService.tileLayer(),
 
-          // ALTERNATİF ROTALAR
-          if (alternativeRoutePoints.isNotEmpty)
-            PolylineLayer(
-              polylines: alternativeRoutePoints.asMap().entries.map(
-                (MapEntry<int, List<LatLng>> entry) {
-                  final List<Color> altColors = [
-                    Colors.teal,
-                    Colors.purple,
-                    Colors.orange,
-                  ];
-                  return Polyline(
-                    points: entry.value,
-                    strokeWidth: 4.5,
-                    color: altColors[entry.key % altColors.length]
-                        .withValues(alpha: 0.75),
-                  );
-                },
-              ).toList(),
-            ),
-
-          // ANA ROTA
-          if (routePoints.isNotEmpty)
-            PolylineLayer(
-              polylines: [
-                Polyline(
-                  points: routePoints,
-                  strokeWidth: 5.0,
-                  color: routeColor,
-                ),
-              ],
-            ),
-
-          // MARKERLAR
-          MarkerLayer(
-            markers: [
-              if (_showTruckParkings)
-                ..._truckParkings.map(
-                  (_TruckParking p) => Marker(
-                    point: p.location,
-                    width: 40,
-                    height: 40,
-                    child: GestureDetector(
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              '${p.name}${p.capacity != null ? ' · Kapasite: ${p.capacity}' : ''}${p.hasRestaurant ? ' · Restoran' : ''}${p.hasShower ? ' · Duş' : ''}${p.hasFuel ? ' · Yakıt' : ''}',
-                            ),
-                            duration: const Duration(seconds: 4),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade700,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                          boxShadow: const [
-                            BoxShadow(color: Colors.black38, blurRadius: 4),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.local_shipping,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              if (_showFuelStations)
-                ..._fuelStations.map(
-                  (_FuelStation f) => Marker(
-                    point: f.location,
-                    width: 36,
-                    height: 36,
-                    child: GestureDetector(
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              '${f.name}${f.hgvFriendly ? ' · LKW Uyumlu' : ''}${f.hasAdBlue ? ' · AdBlue' : ''}${f.hasRestaurant ? ' · Restoran' : ''}',
-                            ),
-                            duration: const Duration(seconds: 4),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade700,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                          boxShadow: const [
-                            BoxShadow(color: Colors.black38, blurRadius: 4),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.local_gas_station,
-                          color: Colors.white,
-                          size: 18,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              if (_showRestrictions)
-                ..._routeRestrictions.map(
-                  (_RouteRestriction r) => Marker(
-                    point: r.location,
-                    width: 36,
-                    height: 36,
-                    child: _buildRestrictionMarker(r),
-                  ),
-                ),
-              if (alternativeRoutePoints.isNotEmpty)
-                for (int i = 0; i < alternativeRoutePoints.length; i++)
-                  if (alternativeRoutePoints[i].isNotEmpty)
-                    Marker(
-                      point: alternativeRoutePoints[i]
-                          [alternativeRoutePoints[i].length ~/ 2],
-                      width: 44,
-                      height: 44,
+            // MARKERLAR
+            MarkerLayer(
+              markers: [
+                if (_showTruckParkings)
+                  ..._truckParkings.map(
+                    (_TruckParking p) => Marker(
+                      point: p.location,
+                      width: 40,
+                      height: 40,
                       child: GestureDetector(
-                        onTap: () => _selectAlternativeRoute(i),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: [Colors.teal, Colors.purple, Colors.orange]
-                                [i % 3],
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.white,
-                              width: 2.5,
-                            ),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Colors.black38,
-                                blurRadius: 6,
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '${p.name}${p.capacity != null ? ' · Kapasite: ${p.capacity}' : ''}${p.hasRestaurant ? ' · Restoran' : ''}${p.hasShower ? ' · Duş' : ''}${p.hasFuel ? ' · Yakıt' : ''}',
                               ),
+                              duration: const Duration(seconds: 4),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade700,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                            boxShadow: const [
+                              BoxShadow(color: Colors.black38, blurRadius: 4),
                             ],
                           ),
-                          child: Center(
-                            child: Text(
-                              'A${i + 1}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
+                          child: const Icon(
+                            Icons.local_shipping,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (_showFuelStations)
+                  ..._fuelStations.map(
+                    (_FuelStation f) => Marker(
+                      point: f.location,
+                      width: 36,
+                      height: 36,
+                      child: GestureDetector(
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '${f.name}${f.hgvFriendly ? ' · LKW Uyumlu' : ''}${f.hasAdBlue ? ' · AdBlue' : ''}${f.hasRestaurant ? ' · Restoran' : ''}',
+                              ),
+                              duration: const Duration(seconds: 4),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade700,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                            boxShadow: const [
+                              BoxShadow(color: Colors.black38, blurRadius: 4),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.local_gas_station,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (_showRestrictions)
+                  ..._routeRestrictions.map(
+                    (_RouteRestriction r) => Marker(
+                      point: r.location,
+                      width: 36,
+                      height: 36,
+                      child: _buildRestrictionMarker(r),
+                    ),
+                  ),
+                if (alternativeRoutePoints.isNotEmpty)
+                  for (int i = 0; i < alternativeRoutePoints.length; i++)
+                    if (alternativeRoutePoints[i].isNotEmpty)
+                      Marker(
+                        point: alternativeRoutePoints[i]
+                            [alternativeRoutePoints[i].length ~/ 2],
+                        width: 44,
+                        height: 44,
+                        child: GestureDetector(
+                          onTap: () => _selectAlternativeRoute(i),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: [
+                                Colors.teal,
+                                Colors.purple,
+                                Colors.orange
+                              ][i % 3],
+                              shape: BoxShape.circle,
+                              border: Border.all(
                                 color: Colors.white,
+                                width: 2.5,
+                              ),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black38,
+                                  blurRadius: 6,
+                                ),
+                              ],
+                            ),
+                            child: Center(
+                              child: Text(
+                                'A${i + 1}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-              if (userLocation != null)
-                Marker(
-                  point: userLocation!,
-                  width: 55,
-                  height: 55,
-                  child: Transform.rotate(
-                    angle:
-                        _navigationMode ? 0 : _currentHeading * math.pi / 180,
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black26,
-                            blurRadius: 5,
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.navigation,
-                        color: AppTheme.primaryBlue,
-                        size: 34,
+                if (userLocation != null)
+                  Marker(
+                    point: userLocation!,
+                    width: 55,
+                    height: 55,
+                    child: Transform.rotate(
+                      angle:
+                          _navigationMode ? 0 : _currentHeading * math.pi / 180,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black26,
+                              blurRadius: 5,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.navigation,
+                          color: AppTheme.primaryBlue,
+                          size: 34,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              if (destination != null)
-                Marker(
-                  point: destination!,
-                  width: 50,
-                  height: 50,
-                  child: const Icon(
-                    Icons.location_on,
-                    color: Colors.red,
-                    size: 45,
+                if (destination != null)
+                  Marker(
+                    point: destination!,
+                    width: 50,
+                    height: 50,
+                    child: const Icon(
+                      Icons.location_on,
+                      color: Colors.red,
+                      size: 45,
+                    ),
                   ),
-                ),
-            ],
-          ),
-        ],
-      ),
-      _buildMapControls(),
-    ],
-  );
-}
+              ],
+            ),
+          ],
+        ),
+        _buildMapControls(),
+      ],
+    );
+  }
 
 // ============================================================
 // HARITA FONKSİYONLARI
 // ============================================================
 
-Future<void> _addStop(
-  LatLng point,
-  String stopName,
-  String coordsText,
-) async {
-  final newStop = {
-    'id': DateTime.now().millisecondsSinceEpoch.toString(),
-    'name': stopName,
-    'location': point,
-    'coordsText': coordsText,
-  };
-
-  setState(() {
-    stops.add(newStop);
-  });
-
-  print('Durak eklendi: $stopName - $coordsText');
-}
-
-void selectMapPoint(LatLng point) {
-  setState(() {
-    destination = point;
-  });
-  print('Nokta seçildi: ${point.latitude}, ${point.longitude}');
-}
-
-void _selectAlternativeRoute(int index) {
-  if (index < 0 || index >= alternativeRoutePoints.length) return;
-
-  setState(() {
-    routePoints = alternativeRoutePoints[index];
-  });
-  print('Alternatif rota $index seçildi');
-}
-
-Widget _buildRestrictionMarker(_RouteRestriction r) {
-  return Container(
-    width: 36,
-    height: 36,
-    decoration: BoxDecoration(
-      color: Colors.red.shade700,
-      shape: BoxShape.circle,
-      border: Border.all(color: Colors.white, width: 2),
-      boxShadow: const [
-        BoxShadow(color: Colors.black38, blurRadius: 4),
-      ],
-    ),
-    child: const Icon(
-      Icons.warning,
-      color: Colors.white,
-      size: 18,
-    ),
-  );
-}
-
 // ============================================================
 // BUILD
 // ============================================================
-
-@override
-Widget build(BuildContext context) {
-  return Scaffold(
-    body: _buildMap(),
-  );
 }
