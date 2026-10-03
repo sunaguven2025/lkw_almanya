@@ -1,4 +1,4 @@
-// ignore_for_file: curly_braces_in_flow_control_structures
+// ignore_for_file: curly_braces_in_flow_control_structures, invalid_use_of_protected_member
 part of 'home_page.dart';
 
 extension _HomePageUIX on _HomePageState {
@@ -2410,9 +2410,9 @@ out center;''';
                     _labeledControlButton(
                       heroTag: 'stops',
                       icon: Icons.flag,
-                      label: stops.isEmpty
+                      label: _stops.isEmpty
                           ? 'Duraklar'
-                          : 'Duraklar (${stops.length})',
+                          : 'Duraklar (${_stops.length})',
                       onPressed: _showStopsManager,
                     ),
                     _labeledControlButton(
@@ -2621,7 +2621,11 @@ out center;''';
             },
           ),
           children: [
-            OfflineMapService.tileLayer(),
+            TileLayer(
+              urlTemplate: _tileUrlTemplate,
+              subdomains: const ['a', 'b', 'c'],
+              userAgentPackageName: 'com.example.lkw_almanya',
+            ),
 
             // ALTERNATİF ROTALAR
             if (alternativeRoutePoints.isNotEmpty)
@@ -2829,12 +2833,4 @@ out center;''';
       ],
     );
   }
-
-// ============================================================
-// HARITA FONKSİYONLARI
-// ============================================================
-
-// ============================================================
-// BUILD
-// ============================================================
 }
