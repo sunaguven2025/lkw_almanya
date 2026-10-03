@@ -138,10 +138,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_map
-      sha256: "5286f72f87deb132daa1489442d6cc46e986fc105cb727d9ae1b602b35b1d1f3"
+      sha256: "87cc8349b8fa5dccda5af50018c7374b6645334a0d680931c1fe11bce88fa5bb"
       url: "https://pub.dev"
     source: hosted
-    version: "5.0.0"
+    version: "6.2.1"
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -320,6 +320,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.1"
+  logger:
+    dependency: transitive
+    description:
+      name: logger
+      sha256: "2a0dc097e7b01d942475bdd552356db2d0f768b05540bd4b2b53f1840f2239a7"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.8.0"
   logging:
     dependency: transitive
     description:
@@ -417,7 +425,7 @@ packages:
     source: hosted
     version: "1.9.1"
   path_provider:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: path_provider
       sha256: a7f4874f987173da295a61c181b8ee71dab59b332a486b391babf26a1b884825

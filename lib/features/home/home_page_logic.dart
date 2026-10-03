@@ -1123,7 +1123,7 @@ extension _HomePageLogicX on _HomePageState {
     double heading,
   ) {
     try {
-      double zoom = mapController.zoom;
+      double zoom = mapController.camera.zoom;
 
       if (_navigationStarted) {
         zoom = 17.0;
