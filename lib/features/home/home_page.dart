@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:geolocator/geolocator.dart';
@@ -14,6 +13,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../services/route_service.dart'; // ⬅️ YENİ — TomTom + modeller
 import '../../theme/app_theme.dart';
 import '../models/truck_profile.dart';
 import '../services/truck_profile_storage.dart';

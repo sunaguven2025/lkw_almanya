@@ -29,7 +29,7 @@ dependencies:
   geolocator: ^10.1.1
   flutter_map: ^6.0.0
 
-  # Ağ ve HTTP
+  # Ağ ve HTTP (TomTom API için)
   http: ^1.2.0
 
   # Sistem
@@ -50,4 +50,9 @@ flutter:
 
   assets:
     - assets/images/
+    # ⚠️ GÜVENLİK NOTU: .env dosyası asset olarak ekli çünkü flutter_dotenv
+    # çalışma zamanında dosyayı okumak zorunda. Bu, API anahtarının APK
+    # içinden çıkarılabileceği anlamına gelir.
+    # Geliştirme için sorun değil. Yayına çıkmadan önce --dart-define
+    # yöntemine geçmeni öneririm (bkz. lib/config/env.dart).
     - .env

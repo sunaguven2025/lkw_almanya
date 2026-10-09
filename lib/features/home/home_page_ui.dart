@@ -1045,145 +1045,69 @@ out center;''';
   }
 
   // ============================================================
-  // ORS DİL
+  // TOMTOM TALİMATLARI
   // ============================================================
 
-  String _orsLanguageCode() {
-    if (_voiceLanguage == 'de-DE') {
-      return 'tr';
-    }
-
-    if (_voiceLanguage == 'en-US') {
-      return 'en';
-    }
-
-    return 'de';
-  }
-
-  // ============================================================
-  // ORS TALİMATLARI
-  // ============================================================
-
-  List<_NavigationInstruction> _parseOrsInstructions(
-    dynamic feature,
+  List<_NavigationInstruction> _parseTomTomInstructions(
+    List<RouteStep> steps,
   ) {
     final List<_NavigationInstruction> result = <_NavigationInstruction>[];
 
-    if (feature is! Map) {
-      return result;
-    }
-
-    final dynamic properties = feature['properties'];
-
-    if (properties is! Map) {
-      return result;
-    }
-
-    final dynamic segments = properties['segments'];
-
-    if (segments is! List) {
-      return result;
-    }
-
-    for (final dynamic segment in segments) {
-      if (segment is! Map) {
+    for (final RouteStep step in steps) {
+      if (step.instruction.isEmpty) {
         continue;
       }
 
-      final dynamic steps = segment['steps'];
-
-      if (steps is! List) {
-        continue;
-      }
-
-      for (final dynamic step in steps) {
-        if (step is! Map) {
-          continue;
-        }
-
-        final String instruction = step['instruction']?.toString() ?? '';
-
-        if (instruction.isEmpty) {
-          continue;
-        }
-
-        final double distance = _numberValue(
-          step['distance'],
-        );
-
-        final double duration = _numberValue(
-          step['duration'],
-        );
-
-        LatLng? location;
-
-        final dynamic wayPoints = step['way_points'];
-
-        if (wayPoints is List && wayPoints.isNotEmpty) {
-          final int index = (wayPoints.first as num).toInt();
-
-          final dynamic geometry = feature['geometry'];
-
-          if (geometry is Map) {
-            final dynamic coords = geometry['coordinates'];
-
-            if (coords is List && index >= 0 && index < coords.length) {
-              final dynamic coord = coords[index];
-
-              if (coord is List && coord.length >= 2) {
-                location = LatLng(
-                  (coord[1] as num).toDouble(),
-                  (coord[0] as num).toDouble(),
-                );
-              }
-            }
-          }
-        }
-
-        result.add(
-          _NavigationInstruction(
-            text: instruction,
-            distance: distance,
-            duration: duration,
-            location: location,
-            modifier: _orsModifier(step['type']),
-          ),
-        );
-      }
+      result.add(
+        _NavigationInstruction(
+          text: step.instruction,
+          distance: step.distanceM,
+          duration: step.durationS,
+          location: step.location.toLatLng(),
+          modifier: _tomtomModifier(step.modifier),
+        ),
+      );
     }
 
     return result;
   }
 
-  String _orsModifier(dynamic value) {
-    final int? type =
-        value is num ? value.toInt() : int.tryParse(value?.toString() ?? '');
+  String _tomtomModifier(String raw) {
+    // TomTom instructionType ("TURN_LEFT", "ROUNDABOUT_EXIT_2")
+    // veya basit modifier ("left", "sharp right") dönebilir.
+    // İkisini de normalize ediyoruz.
+    final String s = raw.toLowerCase();
 
-    switch (type) {
-      case 0:
-        return 'left';
-      case 1:
-        return 'right';
-      case 2:
-        return 'sharp left';
-      case 3:
-        return 'sharp right';
-      case 4:
-        return 'slight left';
-      case 5:
-        return 'slight right';
-      case 6:
-        return 'straight';
-      case 7:
-      case 8:
-        return 'roundabout';
-      case 9:
-        return 'uturn';
-      default:
-        return '';
-    }
+    if (s.contains('uturn') || s.contains('u-turn')) return 'uturn';
+    if (s.contains('sharp') && s.contains('left')) return 'sharp left';
+    if (s.contains('sharp') && s.contains('right')) return 'sharp right';
+    if (s.contains('slight') && s.contains('left')) return 'slight left';
+    if (s.contains('slight') && s.contains('right')) return 'slight right';
+    if (s.contains('roundabout') || s.contains('rotary')) return 'roundabout';
+    if (s.contains('left')) return 'left';
+    if (s.contains('right')) return 'right';
+    if (s.contains('straight') || s.contains('continue')) return 'straight';
+    return '';
   }
 
+  // ============================================================
+  // TRUCK PROFILE → VEHICLE PROFILE DÖNÜŞTÜRÜCÜ
+  // ============================================================
+
+  VehicleProfile _truckProfileToVehicleProfile(TruckProfile p) {
+    return VehicleProfile(
+      type: 'truck',
+      heightM: p.height,
+      widthM: p.width,
+      lengthM: p.length,
+      weightT: p.weight,
+      axleLoadT: p.axleLoad,
+      // TruckProfile'da bu alanlar yok, varsayılan false
+      avoidToll: false,
+      avoidFerry: false,
+      avoidMotorway: false,
+    );
+  }
   // ============================================================
   // OSRM TALİMATLARI
   // ============================================================
@@ -1404,23 +1328,6 @@ out center;''';
   // ============================================================
   // ROTA MESAFESİ
   // ============================================================
-
-  double _calculateRouteDistance(
-    List<LatLng> points,
-  ) {
-    double total = 0;
-
-    for (int i = 1; i < points.length; i++) {
-      total += Geolocator.distanceBetween(
-        points[i - 1].latitude,
-        points[i - 1].longitude,
-        points[i].latitude,
-        points[i].longitude,
-      );
-    }
-
-    return total;
-  }
 
   // ============================================================
   // KOORDİNATLAR
@@ -1797,7 +1704,6 @@ out center;''';
   // ============================================================
   // ÖNERİLER
   // ============================================================
-
   Widget _buildSuggestions() {
     if (searchSuggestions.isEmpty) {
       return const SizedBox.shrink();
@@ -1811,65 +1717,59 @@ out center;''';
         maxHeight: 300,
       ),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(
-          14,
-        ),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: const [
           BoxShadow(
             color: Colors.black26,
             blurRadius: 8,
-            offset: Offset(
-              0,
-              3,
-            ),
+            offset: Offset(0, 3),
           ),
         ],
       ),
-      child: ListView.separated(
-        shrinkWrap: true,
-        itemCount: searchSuggestions.length,
-        separatorBuilder: (
-          BuildContext context,
-          int index,
-        ) {
-          return const Divider(
-            height: 1,
-          );
-        },
-        itemBuilder: (
-          BuildContext context,
-          int index,
-        ) {
-          final dynamic item = searchSuggestions[index];
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: ListView.separated(
+          shrinkWrap: true,
+          itemCount: searchSuggestions.length,
+          separatorBuilder: (
+            BuildContext context,
+            int index,
+          ) {
+            return const Divider(
+              height: 1,
+            );
+          },
+          itemBuilder: (
+            BuildContext context,
+            int index,
+          ) {
+            final dynamic item = searchSuggestions[index];
 
-          return ListTile(
-            tileColor: Colors.white,
-            leading: const Icon(
-              Icons.location_on,
-              color: AppTheme.primaryBlue,
-            ),
-            title: Text(
-              item['display_name']?.toString() ?? '',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              // DÜZELTME (FIX): Liste teması (mavi/grimsi)
-              // sonucu öneri metni silik çıkıyordu. Metin
-              // artık opak siyah yazıldı; temadan bağımsız
-              // her zaman okunaklı.
-              style: const TextStyle(
-                color: Colors.black,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
+            return ListTile(
+              leading: const Icon(
+                Icons.location_on,
+                color: AppTheme.primaryBlue,
               ),
-            ),
-            onTap: () {
-              selectSuggestion(
-                item,
-              );
-            },
-          );
-        },
+              title: Text(
+                item['display_name']?.toString() ?? '',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              onTap: () {
+                selectSuggestion(
+                  item,
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }

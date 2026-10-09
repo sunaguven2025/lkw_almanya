@@ -1,13 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import 'config/env.dart';
 import 'features/home/home_page.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await dotenv.load(fileName: '.env');
+  // .env dosyasını güvenli şekilde yükle
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (e) {
+    debugPrint('⚠️ .env dosyası yüklenemedi: $e');
+  }
+
+  // Geliştirme aşamasında anahtarların yüklendiğini doğrula
+  // (Release modda hiçbir şey yazmaz)
+  Env.printStatus();
 
   runApp(const LkwAlmanyaApp());
 }

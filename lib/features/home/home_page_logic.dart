@@ -946,6 +946,11 @@ extension _HomePageLogicX on _HomePageState {
     try {
       await _tts.stop();
 
+      // ⚠️ DÜZELTME: TTS motoru bazen dil ayarını unutuyor
+      // (özellikle web'de). Her konuşmada dili zorla.
+      // Her zaman Almanca konuş
+      await _tts.setLanguage('de-DE');
+
       await _tts.speak(
         text,
       );
@@ -2497,197 +2502,66 @@ extension _HomePageLogicX on _HomePageState {
       // ========================================================
       // KAMYON - ORS
       // ========================================================
+      // ========================================================
+      // KAMYON - TomTom Routing API
+      // ========================================================
 
       if (vehicle == 'truck') {
-        final String? apiKey = dotenv.env['ORS_API_KEY'];
+        // Kamyon profili: kullanıcının kaydettiği değerler
+        final VehicleProfile truckProfile =
+            _truckProfileToVehicleProfile(_truckProfile);
 
-        if (apiKey == null || apiKey.isEmpty) {
-          if (showLoading && mounted) {
-            Navigator.of(context).maybePop();
-          }
+        final RouteService service = RouteService();
 
-          _showRouteError(
-            'ORS API anahtarı bulunamadı.',
+        // ✅ Ana rota + alternatifleri TEK API çağrısında al
+        List<RouteResult> allRoutes;
+        try {
+          allRoutes = await service.fetchAlternativeRoutes(
+            from: start,
+            to: destinationPoint,
+            profile: truckProfile,
+            alternatives: 2,
           );
-
-          return;
+        } catch (e) {
+          // Alternatif desteklenmezse düz rotayı dene
+          debugPrint('⚠️ Alternatif rota alınamadı, ana rota çekiliyor: $e');
+          allRoutes = <RouteResult>[
+            await service.fetchRoute(
+              from: start,
+              to: destinationPoint,
+              profile: truckProfile,
+            ),
+          ];
         }
 
-        final http.Response response = await http.post(
-          Uri.parse(
-            'https://api.openrouteservice.org/'
-            'v2/directions/driving-hgv/geojson',
-          ),
-          headers: {
-            'Authorization': apiKey,
-            'Content-Type': 'application/json',
-          },
-          body: jsonEncode(
-            {
-              'coordinates': [
-                [
-                  start.longitude,
-                  start.latitude,
-                ],
-                [
-                  destinationPoint.longitude,
-                  destinationPoint.latitude,
-                ],
-              ],
-              'instructions': true,
-              'instructions_format': 'text',
-              'language': _orsLanguageCode(),
-              'options': {
-                'vehicle_type': 'hgv',
-                'profile_params': {
-                  'restrictions': {
-                    'hazmat': false,
-                  },
-                },
-              },
-              'alternative_routes': {
-                'target_count': 2,
-                'weight_factor': 1.4,
-                'share_factor': 0.6,
-              },
-            },
-          ),
-        );
-
-        if (!mounted) {
-          return;
-        }
-
+        if (!mounted) return;
         if (showLoading) {
           Navigator.of(context).maybePop();
         }
 
-        if (response.statusCode != 200) {
-          debugPrint(
-            'ORS STATUS: '
-            '${response.statusCode}',
-          );
+        final RouteResult result = allRoutes.first;
+        final List<LatLng> points = result.points;
 
-          debugPrint(
-            'ORS BODY: '
-            '${response.body}',
-          );
+        // ✅ TomTom'dan gelen alternatifleri kullan
+        final List<List<LatLng>> truckAlternatives = allRoutes
+            .skip(1) // İlk eleman ana rotadır
+            .map((RouteResult r) => r.points)
+            .where((List<LatLng> p) => p.isNotEmpty)
+            .toList();
 
-          _showRouteError(
-            'Kamyon rota hatası '
-            '(${response.statusCode})',
-          );
+        final List<_NavigationInstruction> instructions =
+            _parseTomTomInstructions(result.steps);
+        final double totalDistance = result.distanceM;
+        final double totalDuration = result.durationS;
 
-          return;
-        }
-
-        final dynamic data = jsonDecode(
-          response.body,
+        debugPrint(
+          '🚚 Ana rota: ${result.distanceKm}, '
+          '${truckAlternatives.length} alternatif',
         );
-
-        if (data['features'] == null ||
-            data['features'] is! List ||
-            (data['features'] as List).isEmpty) {
-          _showRouteError(
-            'Kamyon rotası bulunamadı.',
-          );
-
-          return;
-        }
-
-        final List orsFeatures = data['features'] as List;
-
-        final dynamic feature = orsFeatures[0];
-
-        final dynamic geometry = feature['geometry'];
-
-        if (geometry == null || geometry['coordinates'] == null) {
-          _showRouteError(
-            'Kamyon rota geometrisi alınamadı.',
-          );
-
-          return;
-        }
-
-        final List coordinates = geometry['coordinates'] as List;
-
-        final List<LatLng> points = coordinates.map<LatLng>(
-          (dynamic coord) {
-            return LatLng(
-              (coord[1] as num).toDouble(),
-              (coord[0] as num).toDouble(),
-            );
-          },
-        ).toList();
-
-        if (points.isEmpty) {
-          _showRouteError(
-            'Kamyon rotası boş geldi.',
-          );
-
-          return;
-        }
-
-        final List<List<LatLng>> truckAlternatives = <List<LatLng>>[];
-
-        for (int i = 1; i < orsFeatures.length; i++) {
-          final dynamic altGeometry = orsFeatures[i]['geometry'];
-
-          if (altGeometry == null || altGeometry['coordinates'] == null) {
-            continue;
-          }
-
-          final List altCoordinates = altGeometry['coordinates'] as List;
-
-          final List<LatLng> altPoints = altCoordinates.map<LatLng>(
-            (dynamic coord) {
-              return LatLng(
-                (coord[1] as num).toDouble(),
-                (coord[0] as num).toDouble(),
-              );
-            },
-          ).toList();
-
-          if (altPoints.isNotEmpty) {
-            truckAlternatives.add(altPoints);
-          }
-        }
-
-        final List<_NavigationInstruction> instructions = _parseOrsInstructions(
-          feature,
-        );
-
-        double totalDistance = 0;
-
-        double totalDuration = 0;
-
-        final dynamic properties = feature['properties'];
-
-        if (properties is Map) {
-          final dynamic summary = properties['summary'];
-
-          if (summary is Map) {
-            totalDistance = _numberValue(
-              summary['distance'],
-            );
-
-            totalDuration = _numberValue(
-              summary['duration'],
-            );
-          }
-        }
-
-        if (totalDistance <= 0) {
-          totalDistance = _calculateRouteDistance(
-            points,
-          );
-        }
 
         setState(() {
           routeColor = AppTheme.truckOrange;
-
           routePoints = points;
-
           alternativeRoutePoints = truckAlternatives;
 
           if (usedCustomStart) {
@@ -2696,32 +2570,20 @@ extension _HomePageLogicX on _HomePageState {
           }
 
           _navigationStarted = true;
-
           _lastSpokenRouteIndex = -1;
-
           _lastNavigationSpeech = null;
-
           _isFollowingLocation = true;
-
           _navigationInstructions = instructions;
-
           _currentInstructionIndex = 0;
-
           _remainingDistance = totalDistance;
-
           _remainingDuration = totalDuration;
-
           _currentInstructionText = instructions.isNotEmpty
               ? instructions.first.text
               : 'Rotayı takip edin.';
-
           _currentInstructionDistance =
               instructions.isNotEmpty ? instructions.first.distance : 0;
         });
 
-        // DÜZELTME (FIX): Navigasyon başlar başlamaz kamera
-        // sürücü konumuna kilitlenip zoom 17 yapıyor; eski
-        // sürümde harita "sabit" kalıyordu.
         if (userLocation != null) {
           _isFollowingLocation = true;
           _moveMapWithDirection(
@@ -2734,9 +2596,7 @@ extension _HomePageLogicX on _HomePageState {
           );
         }
 
-        _fitRouteOnMap(
-          points,
-        );
+        _fitRouteOnMap(points);
 
         _fetchRouteRestrictions(points);
         _fetchTruckParkings(points);
@@ -2757,8 +2617,6 @@ extension _HomePageLogicX on _HomePageState {
         );
 
         if (announce) {
-          // DÜZELTME (FIX): Google Maps gibi başta "Git / Go / Los"
-          // anonsu ekliyoruz; sadece "rotanız hazır" yetmiyordu.
           await _speak(
             _voiceLanguage == 'tr-TR'
                 ? 'Git. Kamyon rotası hazır. Navigasyon başladı.'
@@ -2770,7 +2628,6 @@ extension _HomePageLogicX on _HomePageState {
 
         return;
       }
-
       // ========================================================
       // OTOMOBİL - OSRM
       // ========================================================

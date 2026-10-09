@@ -1,46 +1,33 @@
-import 'dart:convert';
+// ============================================================
+// ROTA MODELLERİ + TOMTOM TABANLI SERVİS
+// ============================================================
+// NOT: Modeller (VehicleProfile, RouteResult, RouteStep, RoutePoint)
+// burada kalıyor çünkü proje genelinde bu tipler kullanılıyor.
+//
+// Servis implementasyonu artık TomTom Routing API kullanıyor.
+// Eski OSRM tabanlı kod için: route_service_osrm_backup.dart
+// ============================================================
+
 import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
-// ============================================================
-// ÖZEL HATA SINIFLARI
-// ============================================================
-class RouteException implements Exception {
-  final String message;
-  final int? statusCode;
-  RouteException(this.message, {this.statusCode});
-  @override
-  String toString() => 'RouteException: $message';
-}
-
-class RouteParseException extends RouteException {
-  RouteParseException(super.message);
-}
-
-// ============================================================
-// YARDIMCI (SAFE PARSE) FONKSİYONLAR
-// ============================================================
-double _safeDouble(dynamic value, {double fallback = 0.0}) {
-  if (value is num) return value.toDouble();
-  if (value is String) return double.tryParse(value) ?? fallback;
-  return fallback;
-}
+import 'tomtom_route_service.dart';
 
 // ============================================================
 // ARAÇ PROFİLİ
 // ============================================================
 class VehicleProfile {
   final String type; // 'car' veya 'truck'
-  final double heightM;
-  final double widthM;
-  final double lengthM;
-  final double weightT;
-  final double axleLoadT;
-  final bool avoidToll;
-  final bool avoidFerry;
-  final bool avoidMotorway;
+  final double heightM; // Yükseklik (metre)
+  final double widthM; // Genişlik (metre)
+  final double lengthM; // Uzunluk (metre)
+  final double weightT; // Ağırlık (ton)
+  final double axleLoadT; // Aks yükü (ton)
+  final bool avoidToll; // Ücretli yolları avoid et
+  final bool avoidFerry; // Feribot avoid et
+  final bool avoidMotorway; // Otoyol avoid et
 
   const VehicleProfile({
     required this.type,
@@ -102,13 +89,13 @@ class RoutePoint {
 }
 
 // ============================================================
-// ROTA ADIMI
+// ROTA ADIMI (turn-by-turn talimat)
 // ============================================================
 class RouteStep {
   final String instruction;
   final double distanceM;
   final double durationS;
-  final String modifier;
+  final String modifier; // "left", "right", "straight", "turn" vb.
   final RoutePoint location;
 
   RouteStep({
@@ -119,29 +106,29 @@ class RouteStep {
     required this.location,
   });
 
-  factory RouteStep.fromJson(Map<dynamic, dynamic> json) {
-    final step = (json['maneuver'] as Map?) ?? const {};
-
-    // Güvenli koordinat çıkarma
+  /// NOT: Bu metod sadece geriye dönük uyumluluk için duruyor.
+  /// TomTom servisi kendi parse işlemini kendi içinde yapar.
+  factory RouteStep.fromJson(Map<String, dynamic> json) {
+    final step = json['maneuver'] ?? {};
+    final geometry = json['geometry'];
     double lat = 0.0;
     double lon = 0.0;
 
-    final geometry = json['geometry'];
     if (geometry is Map && geometry['coordinates'] is List) {
       final coords = geometry['coordinates'] as List;
       if (coords.isNotEmpty && coords.first is List) {
         final first = coords.first as List;
         if (first.length >= 2) {
-          lon = _safeDouble(first[0]);
-          lat = _safeDouble(first[1]);
+          lon = (first[0] as num?)?.toDouble() ?? 0.0;
+          lat = (first[1] as num?)?.toDouble() ?? 0.0;
         }
       }
     }
 
     return RouteStep(
       instruction: json['name']?.toString() ?? 'Devam et',
-      distanceM: _safeDouble(json['distance']),
-      durationS: _safeDouble(json['duration']),
+      distanceM: ((json['distance'] as num?) ?? 0).toDouble(),
+      durationS: ((json['duration'] as num?) ?? 0).toDouble(),
       modifier: step['modifier']?.toString() ?? '',
       location: RoutePoint(latitude: lat, longitude: lon),
     );
@@ -175,56 +162,51 @@ class RouteResult {
     return '$minutes dk';
   }
 
-  factory RouteResult.fromJson(Map<dynamic, dynamic> json) {
-    // routes kontrolü
+  /// NOT: Geriye dönük uyumluluk. TomTom servisi kendi parse eder.
+  factory RouteResult.fromJson(Map<String, dynamic> json) {
     final routes = json['routes'];
     if (routes is! List || routes.isEmpty) {
-      throw RouteParseException('Rota API cevabında rota bulunamadı');
+      throw Exception('Rota API cevabında rota bulunamadı');
     }
 
     final routeData = routes.first;
-    if (routeData is! Map) {
-      throw RouteParseException('Geçersiz rota veri formatı');
+    if (routeData is! Map<String, dynamic>) {
+      throw Exception('Geçersiz rota veri formatı');
     }
 
-    // geometry kontrolü
     final geometry = routeData['geometry'];
-    if (geometry is! Map) {
-      throw RouteParseException('Rota geometrisi eksik');
+    if (geometry is! Map<String, dynamic>) {
+      throw Exception('Rota geometrisi eksik');
     }
 
     final coordinates = geometry['coordinates'];
     if (coordinates is! List || coordinates.isEmpty) {
-      throw RouteParseException('Rota koordinatları eksik');
+      throw Exception('Rota koordinatları eksik');
     }
 
-    // Koordinatları dönüştür
     final points = <LatLng>[];
     for (final coord in coordinates) {
       if (coord is List && coord.length >= 2) {
-        final lon = _safeDouble(coord[0]);
-        final lat = _safeDouble(coord[1]);
-        // Geçersiz (0,0) noktalarını atla
-        if (lat != 0.0 || lon != 0.0) {
-          points.add(LatLng(lat, lon));
-        }
+        points.add(LatLng(
+          (coord[1] as num).toDouble(),
+          (coord[0] as num).toDouble(),
+        ));
       }
     }
 
     if (points.isEmpty) {
-      throw RouteParseException('Geçerli rota noktası bulunamadı');
+      throw Exception('Geçerli rota noktası bulunamadı');
     }
 
-    // legs ve steps
     final steps = <RouteStep>[];
     final legs = routeData['legs'];
     if (legs is List) {
       for (final leg in legs) {
-        if (leg is! Map) continue;
+        if (leg is! Map<String, dynamic>) continue;
         final stepsList = leg['steps'];
         if (stepsList is List) {
           for (final step in stepsList) {
-            if (step is! Map) continue;
+            if (step is! Map<String, dynamic>) continue;
             try {
               steps.add(RouteStep.fromJson(step));
             } catch (e) {
@@ -235,12 +217,8 @@ class RouteResult {
       }
     }
 
-    final distanceM = _safeDouble(routeData['distance']);
-    final durationS = _safeDouble(routeData['duration']);
-
-    if (distanceM <= 0 || durationS <= 0) {
-      debugPrint('⚠️ Uyarı: distance=$distanceM, duration=$durationS');
-    }
+    final distanceM = ((routeData['distance'] as num?) ?? 0).toDouble();
+    final durationS = ((routeData['duration'] as num?) ?? 0).toDouble();
 
     return RouteResult(
       distanceM: distanceM,
@@ -253,215 +231,64 @@ class RouteResult {
 }
 
 // ============================================================
-// ROTA SERVİSİ
+// ROTA SERVİSİ — TOMTOM BACKEND
 // ============================================================
+/// Yüksek seviye rota servisi.
+///
+/// Şu an **TomTom Routing API v1** kullanır.
+/// Araç profili (kamyon ağırlık/yükseklik/uzunluk) TomTom'a otomatik geçirilir.
+///
+/// Eski OSRM implementasyonu için:
+///   → lib/services/route_service_osrm_backup.dart
 class RouteService {
-  /// NOT: `router.project-osrm.org` public demo sunucusu SADECE
-  /// `driving`, `walking`, `cycling` profillerini destekler.
-  /// `driving-hgv` (kamyon) İÇİN kendi OSRM sunucunu barındırman gerekir.
-  /// Kendi sunucun varsa buraya yaz:
-  static const String _osrmBaseUrl = 'https://router.project-osrm.org/route/v1';
+  final TomTomRouteService _tomtom;
 
-  static const Duration _timeout = Duration(seconds: 30);
-  static const int _maxCoordinates = 25; // URL uzunluğu güvenliği
-  static const String _userAgent = 'LkwAlmanyaApp/1.0 (Flutter)';
+  RouteService({TomTomRouteService? tomtom})
+      : _tomtom = tomtom ?? TomTomRouteService();
 
-  /// Araç profilini OSRM profiline çevir.
-  /// Public sunucuda truck için `driving` fallback uygular.
-  String _getProfileMode(VehicleProfile profile) {
-    if (profile.type == 'truck') {
-      // ⚠️ Public sunucu driving-hgv desteklemiyor.
-      // Kendi sunucun varsa: return 'driving-hgv';
-      return 'driving';
-    }
-    return 'driving';
-  }
-
-  /// URL uzunluğunu güvenli tut
-  void _validateCoordinateCount(int count) {
-    if (count > _maxCoordinates) {
-      throw RouteException(
-        'Çok fazla nokta ($count). En fazla $_maxCoordinates nokta destekleniyor.',
-      );
-    }
-  }
-
-  /// Ortak HTTP isteği
-  Future<RouteResult> _requestRoute(String url) async {
-    debugPrint('🗺️ Route URL: $url');
-
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {'User-Agent': _userAgent},
-    ).timeout(_timeout);
-
-    if (response.statusCode != 200) {
-      throw RouteException(
-        'Rota API hatası: ${response.statusCode}',
-        statusCode: response.statusCode,
-      );
-    }
-
-    final dynamic data = jsonDecode(response.body);
-    if (data is! Map) {
-      throw RouteParseException('API cevabı geçersiz JSON formatı');
-    }
-
-    if (data['code']?.toString() != 'Ok') {
-      throw RouteException('OSRM Error: ${data['message'] ?? 'bilinmeyen'}');
-    }
-
-    return RouteResult.fromJson(data);
-  }
-
-  /// İki nokta (veya opsiyonel waypoint'ler) arasında rota hesapla.
-  /// ✅ DÜZELTME: Waypoint'ler artık `to` noktasından ÖNCE ekleniyor.
+  /// İki nokta arası rota (opsiyonel waypoint'lerle).
   Future<RouteResult> fetchRoute({
     required LatLng from,
     required LatLng to,
     required VehicleProfile profile,
     List<LatLng>? waypoints,
-  }) async {
-    try {
-      final profileMode = _getProfileMode(profile);
-
-      // Doğru sıra: from → waypoints → to
-      final ordered = <LatLng>[
-        from,
-        ...?waypoints,
-        to,
-      ];
-
-      _validateCoordinateCount(ordered.length);
-
-      final coordinates =
-          ordered.map((p) => '${p.longitude},${p.latitude}').join(';');
-
-      final url = '$_osrmBaseUrl/$profileMode/$coordinates'
-          '?overview=full'
-          '&geometries=geojson'
-          '&steps=true'
-          '&continue_straight=default';
-
-      final result = await _requestRoute(url);
-
-      debugPrint(
-        '✅ Rota hesaplandı: ${result.distanceKm}, ${result.durationFormatted}',
+  }) =>
+      _tomtom.fetchRoute(
+        from: from,
+        to: to,
+        profile: profile,
+        waypoints: waypoints,
       );
-      return result;
-    } catch (e) {
-      debugPrint('❌ Rota hesaplama hatası: $e');
-      rethrow;
-    }
-  }
 
-  /// Çoklu durak rotası (tur)
+  /// Çoklu durak (tur) rotası.
   Future<RouteResult> fetchMultiStopRoute({
     required LatLng start,
     required List<LatLng> stops,
     required VehicleProfile profile,
-  }) async {
-    try {
-      if (stops.isEmpty) {
-        throw RouteException('En az bir durak gerekli');
-      }
-
-      final profileMode = _getProfileMode(profile);
-      final allPoints = <LatLng>[start, ...stops];
-
-      _validateCoordinateCount(allPoints.length);
-
-      final coordinates =
-          allPoints.map((p) => '${p.longitude},${p.latitude}').join(';');
-
-      final url = '$_osrmBaseUrl/$profileMode/$coordinates'
-          '?overview=full'
-          '&geometries=geojson'
-          '&steps=true'
-          '&continue_straight=default';
-
-      final result = await _requestRoute(url);
-
-      debugPrint(
-        '✅ Çoklu rota: ${stops.length} durak, ${result.distanceKm}',
+  }) =>
+      _tomtom.fetchMultiStopRoute(
+        start: start,
+        stops: stops,
+        profile: profile,
       );
-      return result;
-    } catch (e) {
-      debugPrint('❌ Çoklu rota hatası: $e');
-      rethrow;
-    }
-  }
 
-  /// Alternatif rotalar
+  /// Alternatif rotalar.
+  /// Alternatif rotalar.
   Future<List<RouteResult>> fetchAlternativeRoutes({
     required LatLng from,
     required LatLng to,
     required VehicleProfile profile,
     int alternatives = 2,
-  }) async {
-    try {
-      final profileMode = _getProfileMode(profile);
+  }) =>
+      _tomtom.fetchAlternativeRoutes(
+        from: from,
+        to: to,
+        profile: profile,
+        alternatives: alternatives,
+      );
 
-      final url = '$_osrmBaseUrl/$profileMode/'
-          '${from.longitude},${from.latitude};'
-          '${to.longitude},${to.latitude}'
-          '?overview=full'
-          '&geometries=geojson'
-          '&steps=true'
-          '&alternatives=$alternatives';
-
-      debugPrint('🗺️ Alternative routes URL: $url');
-
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {'User-Agent': _userAgent},
-      ).timeout(_timeout);
-
-      if (response.statusCode != 200) {
-        throw RouteException(
-          'Alternatif rota API hatası: ${response.statusCode}',
-          statusCode: response.statusCode,
-        );
-      }
-
-      final dynamic data = jsonDecode(response.body);
-      if (data is! Map) {
-        throw RouteParseException('Geçersiz JSON');
-      }
-
-      if (data['code']?.toString() != 'Ok') {
-        throw RouteException('OSRM Error: ${data['message']}');
-      }
-
-      final routes = data['routes'];
-      if (routes is! List || routes.isEmpty) {
-        throw RouteException('Alternatif rota bulunamadı');
-      }
-
-      final results = <RouteResult>[];
-      for (final route in routes) {
-        try {
-          results.add(RouteResult.fromJson({
-            'routes': [route]
-          }));
-        } catch (e) {
-          debugPrint('Alternatif rota ayrıştırma hatası: $e');
-        }
-      }
-
-      if (results.isEmpty) {
-        throw RouteException('Geçerli alternatif rota bulunamadı');
-      }
-
-      debugPrint('✅ ${results.length} alternatif rota bulundu');
-      return results;
-    } catch (e) {
-      debugPrint('❌ Alternatif rota hatası: $e');
-      rethrow;
-    }
-  }
-
-  /// İki nokta arası kuş uçuşu mesafe (metre)
+  /// İki nokta arası kuş uçuşu mesafe (metre).
+  /// Araç rotasından bağımsızdır, yerel hesaplama yapar.
   double calculateDistance(LatLng from, LatLng to) {
     const R = 6371000.0;
     final lat1 = _toRad(from.latitude);
