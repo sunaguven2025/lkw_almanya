@@ -980,7 +980,7 @@ extension _HomePageLogicX on _HomePageState {
 
       setState(() {
         userLocation = location;
-
+        _isFollowingLocation = true; // ⬅️ EKLE
         if (position.heading >= 0 && position.heading.isFinite) {
           _currentHeading = position.heading;
         }
@@ -1148,10 +1148,10 @@ extension _HomePageLogicX on _HomePageState {
           0,
         );
       }
-    } catch (e) {
-      debugPrint(
-        'MAP MOVE ERROR (_moveMapWithDirection): $e',
-      );
+    } catch (e, stackTrace) {
+      // ⬅️ stackTrace'i burada tanımlıyoruz
+      debugPrint('MAP MOVE ERROR (_moveMapWithDirection): $e');
+      debugPrint('STACK: $stackTrace');
     }
   }
 
@@ -1160,7 +1160,7 @@ extension _HomePageLogicX on _HomePageState {
     double heading,
   ) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_navigationStarted || !_isFollowingLocation) {
+      if (!mounted || !_isFollowingLocation) {
         return;
       }
 
