@@ -384,7 +384,8 @@ class _HomePageState extends State<HomePage> {
   bool _isRecalculating = false;
 
   DateTime? _lastRecalculation;
-
+  DateTime? _lastOffRouteCheck; // ⬅️ YENİ
+  int _lastRouteIndex = 0; // ⬅️ YENİ
   // ============================================================
   // FAVORİLER
   // ============================================================

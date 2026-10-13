@@ -1624,34 +1624,60 @@ extension _HomePageLogicX on _HomePageState {
       return;
     }
 
-    double nearestDistance = double.infinity;
+    // ⚠️ DÜZELTME 1: Throttle — her konum güncellemesinde değil,
+    // en fazla 3 saniyede bir kontrol et. Aksi halde UI kilitlenir.
+    final DateTime now = DateTime.now();
+    if (_lastOffRouteCheck != null &&
+        now.difference(_lastOffRouteCheck!) < const Duration(seconds: 3)) {
+      return;
+    }
+    _lastOffRouteCheck = now;
 
-    for (final LatLng point in routePoints) {
+    // ⚠️ DÜZELTME 2: Tüm rotayı değil, sadece konumun yakınındaki
+    // son rota noktalarının etrafını tara. Uzun rotalarda (5000+ nokta)
+    // performans için şart.
+    final int total = routePoints.length;
+    const int window = 30; // ±30 nokta etrafına bak
+    int startIdx = 0;
+    int endIdx = total - 1;
+
+    if (total > window * 2) {
+      // Son bilinen indeksi kullan, yoksa ortadan başla
+      final int center = _lastRouteIndex.clamp(0, total - 1);
+      startIdx = (center - window).clamp(0, total - 1);
+      endIdx = (center + window).clamp(0, total - 1);
+    }
+
+    // En yakın noktayı bul
+    double nearestDistance = double.infinity;
+    int nearestIndex = startIdx;
+
+    for (int i = startIdx; i <= endIdx; i++) {
+      final LatLng point = routePoints[i];
       final double distance = Geolocator.distanceBetween(
         currentLocation.latitude,
         currentLocation.longitude,
         point.latitude,
         point.longitude,
       );
-
       if (distance < nearestDistance) {
         nearestDistance = distance;
+        nearestIndex = i;
       }
     }
 
-    if (nearestDistance < 80) {
+    // Son bilinen rota indeksini güncelle
+    _lastRouteIndex = nearestIndex;
+
+    // ⚠️ DÜZELTME 3: Toleransı 80 → 120 metreye çıkar
+    // Şehir içi GPS doğruluğu 10-30m olabilir; 80m çok düşüktü.
+    if (nearestDistance < 120) {
       return;
     }
 
-    final DateTime now = DateTime.now();
-
+    // Yeniden hesaplama bekleme süresi
     if (_lastRecalculation != null &&
-        now.difference(
-              _lastRecalculation!,
-            ) <
-            const Duration(
-              seconds: 20,
-            )) {
+        now.difference(_lastRecalculation!) < const Duration(seconds: 20)) {
       return;
     }
 
