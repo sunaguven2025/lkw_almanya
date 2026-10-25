@@ -16,6 +16,16 @@ import 'package:latlong2/latlong.dart';
 import 'tomtom_route_service.dart';
 
 // ============================================================
+// KAPALI YOL BÖLÜMÜ MODELİ (YENİ)
+// ============================================================
+class ClosedRoadSection {
+  final List<LatLng> points;
+  final String reason;
+
+  ClosedRoadSection({required this.points, required this.reason});
+}
+
+// ============================================================
 // ARAÇ PROFİLİ
 // ============================================================
 class VehicleProfile {
@@ -106,8 +116,6 @@ class RouteStep {
     required this.location,
   });
 
-  /// NOT: Bu metod sadece geriye dönük uyumluluk için duruyor.
-  /// TomTom servisi kendi parse işlemini kendi içinde yapar.
   factory RouteStep.fromJson(Map<String, dynamic> json) {
     final step = json['maneuver'] ?? {};
     final geometry = json['geometry'];
@@ -144,6 +152,7 @@ class RouteResult {
   final List<LatLng> points;
   final List<RouteStep> steps;
   final String summary;
+  final List<ClosedRoadSection> closedRoads; // ⬅️ YENİ EKLENDİ
 
   RouteResult({
     required this.distanceM,
@@ -151,6 +160,7 @@ class RouteResult {
     required this.points,
     required this.steps,
     this.summary = '',
+    this.closedRoads = const [], // ⬅️ YENİ EKLENDİ
   });
 
   String get distanceKm => '${(distanceM / 1000).toStringAsFixed(1)} km';
@@ -162,7 +172,6 @@ class RouteResult {
     return '$minutes dk';
   }
 
-  /// NOT: Geriye dönük uyumluluk. TomTom servisi kendi parse eder.
   factory RouteResult.fromJson(Map<String, dynamic> json) {
     final routes = json['routes'];
     if (routes is! List || routes.isEmpty) {
@@ -226,6 +235,7 @@ class RouteResult {
       points: points,
       steps: steps,
       summary: routeData['summary']?.toString() ?? '',
+      closedRoads: const [], // ⬅️ YENİ EKLENDİ
     );
   }
 }
@@ -233,20 +243,12 @@ class RouteResult {
 // ============================================================
 // ROTA SERVİSİ — TOMTOM BACKEND
 // ============================================================
-/// Yüksek seviye rota servisi.
-///
-/// Şu an **TomTom Routing API v1** kullanır.
-/// Araç profili (kamyon ağırlık/yükseklik/uzunluk) TomTom'a otomatik geçirilir.
-///
-/// Eski OSRM implementasyonu için:
-///   → lib/services/route_service_osrm_backup.dart
 class RouteService {
   final TomTomRouteService _tomtom;
 
   RouteService({TomTomRouteService? tomtom})
       : _tomtom = tomtom ?? TomTomRouteService();
 
-  /// İki nokta arası rota (opsiyonel waypoint'lerle).
   Future<RouteResult> fetchRoute({
     required LatLng from,
     required LatLng to,
@@ -260,7 +262,6 @@ class RouteService {
         waypoints: waypoints,
       );
 
-  /// Çoklu durak (tur) rotası.
   Future<RouteResult> fetchMultiStopRoute({
     required LatLng start,
     required List<LatLng> stops,
@@ -272,8 +273,6 @@ class RouteService {
         profile: profile,
       );
 
-  /// Alternatif rotalar.
-  /// Alternatif rotalar.
   Future<List<RouteResult>> fetchAlternativeRoutes({
     required LatLng from,
     required LatLng to,
@@ -287,8 +286,6 @@ class RouteService {
         alternatives: alternatives,
       );
 
-  /// İki nokta arası kuş uçuşu mesafe (metre).
-  /// Araç rotasından bağımsızdır, yerel hesaplama yapar.
   double calculateDistance(LatLng from, LatLng to) {
     const R = 6371000.0;
     final lat1 = _toRad(from.latitude);

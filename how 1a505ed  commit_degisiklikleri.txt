@@ -1,0 +1,96 @@
+[33mcommit 1a505edd74fabfc723296d9e1775b1a261a7c0da[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: Suna <arenaguven@gmail.com>
+Date:   Tue Oct 13 21:04:29 2026 +0200
+
+    Harita takip ve navigasyon düzeltmeleri
+
+[1mdiff --git a/lib/features/home/home_page.dart b/lib/features/home/home_page.dart[m
+[1mindex 2d21b99..1f9d270 100644[m
+[1m--- a/lib/features/home/home_page.dart[m
+[1m+++ b/lib/features/home/home_page.dart[m
+[36m@@ -384,7 +384,8 @@[m [mclass _HomePageState extends State<HomePage> {[m
+   bool _isRecalculating = false;[m
+ [m
+   DateTime? _lastRecalculation;[m
+[31m-[m
+[32m+[m[32m  DateTime? _lastOffRouteCheck; // ⬅️ YENİ[m
+[32m+[m[32m  int _lastRouteIndex = 0; // ⬅️ YENİ[m
+   // ============================================================[m
+   // FAVORİLER[m
+   // ============================================================[m
+[1mdiff --git a/lib/features/home/home_page_logic.dart b/lib/features/home/home_page_logic.dart[m
+[1mindex df11c9f..2009a3d 100644[m
+[1m--- a/lib/features/home/home_page_logic.dart[m
+[1m+++ b/lib/features/home/home_page_logic.dart[m
+[36m@@ -1624,34 +1624,60 @@[m [mextension _HomePageLogicX on _HomePageState {[m
+       return;[m
+     }[m
+ [m
+[32m+[m[32m    // ⚠️ DÜZELTME 1: Throttle — her konum güncellemesinde değil,[m
+[32m+[m[32m    // en fazla 3 saniyede bir kontrol et. Aksi halde UI kilitlenir.[m
+[32m+[m[32m    final DateTime now = DateTime.now();[m
+[32m+[m[32m    if (_lastOffRouteCheck != null &&[m
+[32m+[m[32m        now.difference(_lastOffRouteCheck!) < const Duration(seconds: 3)) {[m
+[32m+[m[32m      return;[m
+[32m+[m[32m    }[m
+[32m+[m[32m    _lastOffRouteCheck = now;[m
+[32m+[m
+[32m+[m[32m    // ⚠️ DÜZELTME 2: Tüm rotayı değil, sadece konumun yakınındaki[m
+[32m+[m[32m    // son rota noktalarının etrafını tara. Uzun rotalarda (5000+ nokta)[m
+[32m+[m[32m    // performans için şart.[m
+[32m+[m[32m    final int total = routePoints.length;[m
+[32m+[m[32m    const int window = 30; // ±30 nokta etrafına bak[m
+[32m+[m[32m    int startIdx = 0;[m
+[32m+[m[32m    int endIdx = total - 1;[m
+[32m+[m
+[32m+[m[32m    if (total > window * 2) {[m
+[32m+[m[32m      // Son bilinen indeksi kullan, yoksa ortadan başla[m
+[32m+[m[32m      final int center = _lastRouteIndex.clamp(0, total - 1);[m
+[32m+[m[32m      startIdx = (center - window).clamp(0, total - 1);[m
+[32m+[m[32m      endIdx = (center + window).clamp(0, total - 1);[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    // En yakın noktayı bul[m
+     double nearestDistance = double.infinity;[m
+[32m+[m[32m    int nearestIndex = startIdx;[m
+ [m
+[31m-    for (final LatLng point in routePoints) {[m
+[32m+[m[32m    for (int i = startIdx; i <= endIdx; i++) {[m
+[32m+[m[32m      final LatLng point = routePoints[i];[m
+       final double distance = Geolocator.distanceBetween([m
+         currentLocation.latitude,[m
+         currentLocation.longitude,[m
+         point.latitude,[m
+         point.longitude,[m
+       );[m
+[31m-[m
+       if (distance < nearestDistance) {[m
+         nearestDistance = distance;[m
+[32m+[m[32m        nearestIndex = i;[m
+       }[m
+     }[m
+ [m
+[31m-    if (nearestDistance < 80) {[m
+[32m+[m[32m    // Son bilinen rota indeksini güncelle[m
+[32m+[m[32m    _lastRouteIndex = nearestIndex;[m
+[32m+[m
+[32m+[m[32m    // ⚠️ DÜZELTME 3: Toleransı 80 → 120 metreye çıkar[m
+[32m+[m[32m    // Şehir içi GPS doğruluğu 10-30m olabilir; 80m çok düşüktü.[m
+[32m+[m[32m    if (nearestDistance < 120) {[m
+       return;[m
+     }[m
+ [m
+[31m-    final DateTime now = DateTime.now();[m
+[31m-[m
+[32m+[m[32m    // Yeniden hesaplama bekleme süresi[m
+     if (_lastRecalculation != null &&[m
+[31m-        now.difference([m
+[31m-              _lastRecalculation!,[m
+[31m-            ) <[m
+[31m-            const Duration([m
+[31m-              seconds: 20,[m
+[31m-            )) {[m
+[32m+[m[32m        now.difference(_lastRecalculation!) < const Duration(seconds: 20)) {[m
+       return;[m
+     }[m
+ [m

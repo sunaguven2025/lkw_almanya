@@ -5,33 +5,21 @@ import 'package:latlong2/latlong.dart';
 
 import '../config/env.dart';
 import 'route_service.dart'
-    show VehicleProfile, RouteResult, RouteStep, RoutePoint;
+    show VehicleProfile, RouteResult, RouteStep, RoutePoint, ClosedRoadSection;
 
 /// TomTom Routing API v1 istemcisi.
-///
-/// OSRM public sunucusunun kamyon (HGV) profili eksikliğini giderir.
-/// Kamyon yükseklik, ağırlık, aks yükü gibi kısıtları destekler.
-///
-/// Kullanım:
-///   final service = TomTomRouteService();
-///   final route = await service.fetchRoute(
-///     from: LatLng(52.52, 13.40),
-///     to: LatLng(48.13, 11.58),
-///     profile: VehicleProfile.truck,
-///   );
+/// Ayrıca TomTom Traffic Incident API ile anlık kapalı yolları çeker.
 class TomTomRouteService {
   // ============================================================
   // SABİTLER
   // ============================================================
   static const String _baseUrl =
       'https://api.tomtom.com/routing/1/calculateRoute';
+  static const String _trafficBaseUrl =
+      'https://api.tomtom.com/traffic/services/5/incidentDetails';
 
   static const Duration _timeout = Duration(seconds: 30);
-
-  /// TomTom v1 pratik nokta limiti
   static const int _maxLocations = 50;
-
-  /// Öğretici dil (Almanya için Almanca)
   static const String _instructionLanguage = 'de-DE';
 
   // ============================================================
@@ -49,10 +37,9 @@ class TomTomRouteService {
   }
 
   // ============================================================
-  // PUBLIC API
+  // PUBLIC API (ROTA)
   // ============================================================
 
-  /// İki nokta arasında rota (opsiyonel waypoint'lerle).
   Future<RouteResult> fetchRoute({
     required LatLng from,
     required LatLng to,
@@ -64,7 +51,6 @@ class TomTomRouteService {
     return results.first;
   }
 
-  /// Çoklu durak (tur) rotası.
   Future<RouteResult> fetchMultiStopRoute({
     required LatLng start,
     required List<LatLng> stops,
@@ -78,7 +64,6 @@ class TomTomRouteService {
     return results.first;
   }
 
-  /// Alternatif rotalar.
   Future<List<RouteResult>> fetchAlternativeRoutes({
     required LatLng from,
     required LatLng to,
@@ -90,7 +75,48 @@ class TomTomRouteService {
   }
 
   // ============================================================
-  // CORE
+  // PUBLIC API (TRAFİK / KAPALI YOLLAR)
+  // ============================================================
+
+  /// Verilen bounding box içindeki tüm trafik olaylarını (kaza, inşaat,
+  /// yol kapatma vb.) döndürür.
+  Future<List<Map<String, dynamic>>> fetchTrafficIncidents({
+    required LatLng minPoint,
+    required LatLng maxPoint,
+  }) async {
+    // TomTom Incident Details API
+    // bbox formatı: minLon,minLat,maxLon,maxLat
+    final String url = '$_trafficBaseUrl'
+        '?key=$_apiKey'
+        '&bbox=${minPoint.longitude},${minPoint.latitude},${maxPoint.longitude},${maxPoint.latitude}'
+        '&fields={incidents{type,geometry{type,coordinates},properties{iconCategory,from,to}}}'
+        '&language=de-DE';
+
+    try {
+      final http.Response response =
+          await http.get(Uri.parse(url)).timeout(_timeout);
+
+      if (response.statusCode != 200) {
+        debugPrint('🚦 TOMTOM TRAFFIC HTTP ERROR: ${response.statusCode}');
+        debugPrint('🚦 Body: ${response.body}');
+        return [];
+      }
+
+      final dynamic data = jsonDecode(response.body);
+      final incidents = data['incidents'];
+
+      if (incidents is! List) return [];
+
+      debugPrint('🚦 TomTom Traffic: ${incidents.length} olay bulundu');
+      return incidents.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (e) {
+      debugPrint('🚦 TOMTOM TRAFFIC EXCEPTION: $e');
+      return [];
+    }
+  }
+
+  // ============================================================
+  // CORE ROTA HESAPLAMA
   // ============================================================
 
   Future<List<RouteResult>> _calculateRoute(
@@ -123,7 +149,6 @@ class TomTomRouteService {
       throw Exception('TomTom bağlantı hatası: $e');
     }
 
-    // HTTP durum kodlarına göre anlamlı hata mesajları
     switch (response.statusCode) {
       case 200:
         break;
@@ -154,7 +179,6 @@ class TomTomRouteService {
       throw Exception('TomTom cevabı geçersiz JSON formatı');
     }
 
-    // TomTom bazen 200 ile birlikte detailedError döner
     if (data['detailedError'] != null) {
       final err = data['detailedError'];
       final msg = err is Map ? err['message']?.toString() : err.toString();
@@ -184,7 +208,6 @@ class TomTomRouteService {
     VehicleProfile profile, {
     required int maxAlternatives,
   }) {
-    // TomTom formatı: "lat,lon:lat,lon:lat,lon"
     final locStr =
         locations.map((p) => '${p.latitude},${p.longitude}').join(':');
 
@@ -193,11 +216,11 @@ class TomTomRouteService {
       'travelMode': profile.isTruck ? 'truck' : 'car',
       'routeType': 'fastest',
       'traffic': 'true',
+      'sectionType': 'traffic',
       'instructionsType': 'text',
       'language': _instructionLanguage,
     };
 
-    // Kamyon parametreleri
     if (profile.isTruck) {
       params['vehicleWeight'] = (profile.weightT * 1000).round().toString();
       params['vehicleAxleWeight'] =
@@ -208,7 +231,6 @@ class TomTomRouteService {
       params['vehicleCommercial'] = 'true';
     }
 
-    // Kaçınılacak yollar
     final avoid = <String>[];
     if (profile.avoidToll) avoid.add('tollRoads');
     if (profile.avoidMotorway) avoid.add('motorways');
@@ -260,7 +282,6 @@ class TomTomRouteService {
     final distanceM = _toDouble(summary['lengthInMeters']);
     final durationS = _toDouble(summary['travelTimeInSeconds']);
 
-    // Tüm noktaları legs[*].points üzerinden topla
     final points = <LatLng>[];
     final legs = route['legs'];
     if (legs is List) {
@@ -272,7 +293,6 @@ class TomTomRouteService {
             if (p is Map) {
               final lat = _toDouble(p['latitude']);
               final lon = _toDouble(p['longitude']);
-              // (0,0) hatalı noktaları atla
               if (lat != 0 || lon != 0) {
                 points.add(LatLng(lat, lon));
               }
@@ -286,7 +306,6 @@ class TomTomRouteService {
       throw Exception('TomTom rota geometrisi boş');
     }
 
-    // Turn-by-turn talimatlar
     final steps = <RouteStep>[];
     final guidance = route['guidance'];
     if (guidance is Map) {
@@ -296,7 +315,6 @@ class TomTomRouteService {
           final inst = instructions[i];
           if (inst is! Map) continue;
 
-          // Mesafe: sonraki adımın offseti - bu adımın offseti
           final currentOffset = _toDouble(inst['routeOffsetInMeters']);
           double nextOffset = distanceM;
           if (i + 1 < instructions.length) {
@@ -308,11 +326,9 @@ class TomTomRouteService {
           final stepDist =
               (nextOffset - currentOffset).clamp(0.0, double.infinity);
 
-          // Süreyi mesafeye oranla dağıt
           final stepDuration =
               distanceM > 0 ? (stepDist / distanceM) * durationS : 0.0;
 
-          // Konum
           double lat = 0, lon = 0;
           final pt = inst['point'];
           if (pt is Map) {
@@ -331,12 +347,39 @@ class TomTomRouteService {
       }
     }
 
+    // KAPALI YOLLARI AYIKLA (rota üzerinden gelen trafik verisi)
+    final closedRoads = <ClosedRoadSection>[];
+    final sections = route['sections'];
+    if (sections is List) {
+      for (final section in sections) {
+        if (section is! Map) continue;
+
+        final sectionType = section['sectionType']?.toString() ?? '';
+        final categories = section['categories'];
+
+        if (sectionType == 'traffic' && categories is List) {
+          if (categories.contains('road-closed')) {
+            final startIdx = (section['startPointIndex'] as num?)?.toInt() ?? 0;
+            final endIdx = (section['endPointIndex'] as num?)?.toInt() ?? 0;
+
+            if (endIdx > startIdx && endIdx < points.length) {
+              closedRoads.add(ClosedRoadSection(
+                points: points.sublist(startIdx, endIdx + 1),
+                reason: 'Yol Kapalı',
+              ));
+            }
+          }
+        }
+      }
+    }
+
     return RouteResult(
       distanceM: distanceM,
       durationS: durationS,
       points: points,
       steps: steps,
       summary: summary['departureTime']?.toString() ?? '',
+      closedRoads: closedRoads,
     );
   }
 

@@ -303,10 +303,6 @@ extension _HomePageLogicX on _HomePageState {
       },
     );
 
-    /*
-   * Dialog kapandıktan sonra Flutter'ın Focus/TextField
-   * temizleme işlemlerinin tamamlanmasını bekliyoruz.
-   */
     await Future<void>.delayed(
       const Duration(
         milliseconds: 100,
@@ -678,9 +674,53 @@ extension _HomePageLogicX on _HomePageState {
         0.55,
       );
 
+      // 🎙️ SES TONU (PITCH) AYARI:
+      // Samsung cihazlar setVoice'ı yoksaydığı için sesi zorla kalınlaştırıyoruz
       await _tts.setPitch(
-        1.0,
+        0.6,
       );
+
+      // ============================================================
+      // 🎙️ ERKEK SESİ SEÇİMİ
+      // ============================================================
+      try {
+        final List<dynamic> voices = await _tts.getVoices;
+
+        dynamic germanMaleNetworkVoice;
+        dynamic germanMaleVoice;
+
+        for (var voice in voices) {
+          final String name = voice['name'].toString().toLowerCase();
+          final String locale = voice['locale'].toString().toLowerCase();
+          if (locale.contains('de-de') ||
+              locale.contains('de_de') ||
+              locale.contains('de')) {
+            if (name.contains('deb')) {
+              if (name.contains('network')) {
+                germanMaleNetworkVoice = voice;
+              } else {
+                germanMaleVoice ??= voice;
+              }
+            }
+          }
+        }
+
+        final selectedVoice = germanMaleNetworkVoice ?? germanMaleVoice;
+
+        if (selectedVoice != null) {
+          final Map<String, String> voiceMap = Map<String, String>.from(
+            selectedVoice as Map,
+          );
+          await _tts.setVoice(voiceMap);
+          debugPrint('✅ ERKEK SESİ SEÇİLDİ: ${voiceMap['name']}');
+        } else {
+          debugPrint(
+              '⚠️ Uygun bir Almanca erkek sesi bulunamadı. Varsayılan ses kullanılıyor.');
+        }
+      } catch (e) {
+        debugPrint('SES LİSTESİ ALINAMADI: $e');
+      }
+      // ============================================================
 
       if (!mounted) {
         return;
@@ -980,26 +1020,13 @@ extension _HomePageLogicX on _HomePageState {
 
       setState(() {
         userLocation = location;
-        _isFollowingLocation = true; // ⬅️ EKLE
+        _isFollowingLocation = true; // ⬅️ Başlangıçta takibi aç
+
         if (position.heading >= 0 && position.heading.isFinite) {
           _currentHeading = position.heading;
         }
       });
 
-      // ------------------------------------------------------------
-      // DÜZELTME (FIX): mapController.move() çağrısı, setState()
-      // sonrası HEMEN çalıştırılıyordu. Ancak setState() sadece bir
-      // sonraki frame'de yeniden çizimi PLANLAR; o an FlutterMap
-      // widget'ı (ve dolayısıyla mapController'ın dahili "state"
-      // alanı) henüz oluşmamış olabiliyordu. Bu da
-      // "LateInitializationError: Field 'state@...' has not been
-      // initialized" hatasına yol açıyordu.
-      //
-      // Çözüm: move() çağrısını addPostFrameCallback ile bir sonraki
-      // frame'e erteliyoruz, böylece FlutterMap widget'ı build edilip
-      // controller'a bağlandıktan SONRA çalışır. Ekstra güvenlik için
-      // try/catch de ekledik.
-      // ------------------------------------------------------------
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) {
           return;
@@ -1042,7 +1069,7 @@ extension _HomePageLogicX on _HomePageState {
 
     const LocationSettings settings = LocationSettings(
       accuracy: LocationAccuracy.bestForNavigation,
-      distanceFilter: 3,
+      distanceFilter: 5,
     );
 
     _positionSubscription = Geolocator.getPositionStream(
@@ -1060,38 +1087,57 @@ extension _HomePageLogicX on _HomePageState {
 
         double heading = _currentHeading;
 
+        // 1. ÖNCELİK: Navigasyon açıksa, yönü HER ZAMAN rotadan al.
         if (_navigationStarted && routePoints.length >= 2) {
-          // Navigasyon sırasında pusula heading'i düşük hızda veya araç
-          // dururken eski/hatalı kalabilir. Oku rota üzerindeki bir sonraki
-          // noktaya göre hizalayarak gerçek sürüş yönünü gösteriyoruz.
           heading = _routeBearing(location);
-        } else if (position.heading >= 0 &&
+        }
+        // 2. ÖNCELİK: Navigasyon kapalıysa ve araç yeterince hızlıysa GPS yönünü kullan.
+        else if (position.heading >= 0 &&
             position.heading.isFinite &&
-            position.speed > 1.0) {
+            position.speed > 5.0) {
           heading = position.heading;
         }
 
+        // ---- SNAP TO ROAD (YOLA KİLİTLEME) ----
+        LatLng displayLocation = location;
+
+        if (_navigationStarted && routePoints.length >= 2) {
+          final int nearestIdx = _nearestRoutePointIndex(location);
+          final LatLng routePoint = routePoints[nearestIdx];
+
+          final double distToRoute = Geolocator.distanceBetween(
+            location.latitude,
+            location.longitude,
+            routePoint.latitude,
+            routePoint.longitude,
+          );
+
+          // Eğer GPS konumu rotaya 60 metreden yakınsa, mavi oku tam rotanın üzerine çek
+          if (distToRoute < 60) {
+            displayLocation = routePoint;
+          }
+        }
+
+        // ---- STATE GÜNCELLEMESİ ----
         setState(() {
-          userLocation = location;
+          userLocation = displayLocation;
           _currentHeading = heading;
         });
 
+        // ---- HARİTAYI HAREKET ETTİR ----
         if (_isFollowingLocation) {
           _moveMapWithDirection(
-            location,
+            displayLocation,
             heading,
           );
 
-          // Konum setState'i haritayı yeniden oluşturduğunda bazı
-          // flutter_map sürümleri kamerayı MapOptions'taki başlangıç
-          // zoom'una geri alabiliyor. Kamerayı frame sonrasında tekrar
-          // sürücüye kilitleyerek navigasyon zoom'unu koruyoruz.
           _scheduleNavigationCamera(
-            location,
+            displayLocation,
             heading,
           );
         }
 
+        // ---- NAVİGASYON KONTROLLERİ ----
         if (_navigationStarted && routePoints.isNotEmpty) {
           _checkNavigationProgress(
             location,
@@ -1148,10 +1194,10 @@ extension _HomePageLogicX on _HomePageState {
           0,
         );
       }
-    } catch (e, stackTrace) {
-      // ⬅️ stackTrace'i burada tanımlıyoruz
-      debugPrint('MAP MOVE ERROR (_moveMapWithDirection): $e');
-      debugPrint('STACK: $stackTrace');
+    } catch (e) {
+      debugPrint(
+        'MAP MOVE ERROR (_moveMapWithDirection): $e',
+      );
     }
   }
 
@@ -1228,7 +1274,6 @@ extension _HomePageLogicX on _HomePageState {
       _speedLimits = <_SpeedLimitSegment>[];
       _currentSpeedLimit = 0;
       _truckParkings = <_TruckParking>[];
-      _fuelStations = <_FuelStation>[];
       destination = null;
       addressController.clear();
       _remainingDistance = 0;
@@ -1309,10 +1354,6 @@ extension _HomePageLogicX on _HomePageState {
       return;
     }
 
-    // Talimatı "en yakın manevra" ile seçmek, başlangıçtaki "Yola çıkın"
-    // talimatının uzun süre aktif kalmasına neden oluyordu. Bunun yerine
-    // aracın rota üzerindeki ilerlemesini ölçüp, geride kalan talimatları
-    // atlıyor ve sıradaki manevrayı gösteriyoruz.
     final int currentRouteIndex = _nearestRoutePointIndex(currentLocation);
     int nextInstructionIndex = _currentInstructionIndex;
 
@@ -1333,7 +1374,6 @@ extension _HomePageLogicX on _HomePageState {
         break;
       }
 
-      // Bu manevra geride kaldı; sonraki talimata ilerlemeye devam et.
       nextInstructionIndex = i;
     }
 
@@ -1356,8 +1396,6 @@ extension _HomePageLogicX on _HomePageState {
         instruction.location!.longitude,
       );
 
-      // DÜZELTME (FIX): Talimat metni hiç güncellenmiyordu; üst
-      // kart her zaman "Yola çıkın" sabit kalıyordu.
       _currentInstructionText = instruction.text;
 
       _currentInstructionDistance = distance;
@@ -1365,9 +1403,6 @@ extension _HomePageLogicX on _HomePageState {
       _speakNavigationInstructionIfNeeded(instruction, distance);
     }
 
-    // Kalan mesafeyi yalnızca talimat değiştiğinde değil, her GPS
-    // güncellemesinde rota geometrisi üzerinden hesapla. Aksi halde alt
-    // karttaki mesafe (ör. 241 m) bir sonraki manevraya kadar sabit kalır.
     double remaining = 0;
 
     if (routePoints.length >= 2) {
@@ -1413,15 +1448,28 @@ extension _HomePageLogicX on _HomePageState {
     }
   }
 
+  // ============================================================
+  // EN YAKIN ROTA NOKTASI (OPTİMİZE EDİLDİ)
+  // ============================================================
   int _nearestRoutePointIndex(LatLng location) {
-    if (routePoints.isEmpty) {
-      return 0;
+    if (routePoints.isEmpty) return 0;
+
+    final int total = routePoints.length;
+    const int window = 50;
+
+    int startIdx = 0;
+    int endIdx = total - 1;
+
+    if (total > window * 2 && _lastRouteIndex > 0) {
+      final int center = _lastRouteIndex.clamp(0, total - 1);
+      startIdx = (center - window).clamp(0, total - 1);
+      endIdx = (center + window).clamp(0, total - 1);
     }
 
     double nearestDistance = double.infinity;
-    int nearestIndex = 0;
+    int nearestIndex = startIdx;
 
-    for (int i = 0; i < routePoints.length; i++) {
+    for (int i = startIdx; i <= endIdx; i++) {
       final LatLng point = routePoints[i];
       final double distance = Geolocator.distanceBetween(
         location.latitude,
@@ -1429,39 +1477,40 @@ extension _HomePageLogicX on _HomePageState {
         point.latitude,
         point.longitude,
       );
-
       if (distance < nearestDistance) {
         nearestDistance = distance;
         nearestIndex = i;
       }
     }
 
+    _lastRouteIndex = nearestIndex;
     return nearestIndex;
   }
 
+  // ============================================================
+  // ROTA YÖNÜ (İYİLEŞTİRİLDİ)
+  // ============================================================
   double _routeBearing(LatLng location) {
-    if (routePoints.length < 2) {
-      return _currentHeading;
-    }
+    if (routePoints.length < 2) return _currentHeading;
 
     final int nearestIndex = _nearestRoutePointIndex(location);
-    int nextIndex = nearestIndex + 1;
 
-    while (nextIndex < routePoints.length - 1 &&
-        Geolocator.distanceBetween(
-              routePoints[nearestIndex].latitude,
-              routePoints[nearestIndex].longitude,
-              routePoints[nextIndex].latitude,
-              routePoints[nextIndex].longitude,
-            ) <
-            2) {
-      nextIndex++;
+    int lookAheadIndex = (nearestIndex + 10).clamp(0, routePoints.length - 1);
+
+    if (lookAheadIndex == nearestIndex) {
+      lookAheadIndex = (nearestIndex - 10).clamp(0, routePoints.length - 1);
     }
 
     final LatLng from = routePoints[nearestIndex];
-    final int safeNextIndex =
-        nextIndex.clamp(0, routePoints.length - 1).toInt();
-    final LatLng to = routePoints[safeNextIndex];
+    final LatLng to = routePoints[lookAheadIndex];
+
+    final double dist = Geolocator.distanceBetween(
+      from.latitude,
+      from.longitude,
+      to.latitude,
+      to.longitude,
+    );
+    if (dist < 5) return _currentHeading;
 
     final double lat1 = from.latitude * math.pi / 180;
     final double lat2 = to.latitude * math.pi / 180;
@@ -1484,10 +1533,6 @@ extension _HomePageLogicX on _HomePageState {
     _NavigationInstruction instruction,
     double distance,
   ) async {
-    // Rota servisleri otoyollarda çok sayıda "düz devam et / A45 üzerinde
-    // devam et" adımı döndürebilir. Bunları seslendirmek, düz yolda sürekli
-    // ve gereksiz anons yapılmasına neden olur. Talimat ekranda görünmeye
-    // devam eder; yalnızca gerçek manevralar seslendirilir.
     if (!_isVoiceRelevantInstruction(instruction)) {
       instruction.spokenFar = true;
       instruction.spokenNear = true;
@@ -1503,9 +1548,6 @@ extension _HomePageLogicX on _HomePageState {
     String? speakText;
 
     if (!instruction.isLongLeg) {
-      // KISA MESAFE: tek seferlik anons yeterli.
-      // Talimat aktif olur olmaz (segment ne kadar kısaysa o kadar erken,
-      // en geç 250 m kala) tek seferde söylenir.
       final double announceAt = math.min(instruction.distance, 250);
 
       if (distance <= announceAt) {
@@ -1529,7 +1571,6 @@ extension _HomePageLogicX on _HomePageState {
       return;
     }
 
-    // UZUN MESAFE: 3 aşamalı anons -> ~3 km, ~500 m, şimdi.
     if (distance <= 50) {
       instruction.spokenNow = true;
       instruction.spokenNear = true;
@@ -1568,9 +1609,6 @@ extension _HomePageLogicX on _HomePageState {
       return false;
     }
 
-    // Bazı ORS cevaplarında modifier boş gelebiliyor. Metin açıkça düz
-    // ilerlemeyi anlatıyorsa yine seslendirmiyoruz; "sağda kal", çıkış,
-    // rampa ve dönüş gibi ifadeler bu filtreden geçer.
     if (modifier.isEmpty &&
         RegExp(
           r'\b(weiter|geradeaus|folgen|nördlich|südlich|östlich|westlich|'
@@ -1604,7 +1642,6 @@ extension _HomePageLogicX on _HomePageState {
       return 'Jetzt $text';
     }
 
-    // kind == 'in_distance'
     if (_voiceLanguage == 'tr-TR') {
       return '$distanceText sonra $text';
     } else if (_voiceLanguage == 'en-US') {
@@ -1624,8 +1661,6 @@ extension _HomePageLogicX on _HomePageState {
       return;
     }
 
-    // ⚠️ DÜZELTME 1: Throttle — her konum güncellemesinde değil,
-    // en fazla 3 saniyede bir kontrol et. Aksi halde UI kilitlenir.
     final DateTime now = DateTime.now();
     if (_lastOffRouteCheck != null &&
         now.difference(_lastOffRouteCheck!) < const Duration(seconds: 3)) {
@@ -1633,22 +1668,17 @@ extension _HomePageLogicX on _HomePageState {
     }
     _lastOffRouteCheck = now;
 
-    // ⚠️ DÜZELTME 2: Tüm rotayı değil, sadece konumun yakınındaki
-    // son rota noktalarının etrafını tara. Uzun rotalarda (5000+ nokta)
-    // performans için şart.
     final int total = routePoints.length;
-    const int window = 30; // ±30 nokta etrafına bak
+    const int window = 30;
     int startIdx = 0;
     int endIdx = total - 1;
 
     if (total > window * 2) {
-      // Son bilinen indeksi kullan, yoksa ortadan başla
       final int center = _lastRouteIndex.clamp(0, total - 1);
       startIdx = (center - window).clamp(0, total - 1);
       endIdx = (center + window).clamp(0, total - 1);
     }
 
-    // En yakın noktayı bul
     double nearestDistance = double.infinity;
     int nearestIndex = startIdx;
 
@@ -1666,16 +1696,12 @@ extension _HomePageLogicX on _HomePageState {
       }
     }
 
-    // Son bilinen rota indeksini güncelle
     _lastRouteIndex = nearestIndex;
 
-    // ⚠️ DÜZELTME 3: Toleransı 80 → 120 metreye çıkar
-    // Şehir içi GPS doğruluğu 10-30m olabilir; 80m çok düşüktü.
     if (nearestDistance < 120) {
       return;
     }
 
-    // Yeniden hesaplama bekleme süresi
     if (_lastRecalculation != null &&
         now.difference(_lastRecalculation!) < const Duration(seconds: 20)) {
       return;
@@ -1784,11 +1810,16 @@ extension _HomePageLogicX on _HomePageState {
   String _formatDistance(
     double meters,
   ) {
-    if (meters < 1000) {
+    if (meters < 10) {
       return '${meters.round()} m';
+    } else if (meters < 100) {
+      return '${(meters / 10).round() * 10} m';
+    } else if (meters < 1000) {
+      return '${(meters / 50).round() * 50} m';
+    } else {
+      final double km = (meters / 100).round() / 10;
+      return '${km.toStringAsFixed(1)} km';
     }
-
-    return '${(meters / 1000).toStringAsFixed(1)} km';
   }
 
   // ============================================================
@@ -2511,9 +2542,6 @@ extension _HomePageLogicX on _HomePageState {
 
     final LatLng start = effectiveStart;
 
-    // Rota bir kez hesaplandıktan sonra, rotadan sapma durumunda yapılacak
-    // yeniden hesaplamalar her zaman güncel GPS konumunu kullanmalı; bu
-    // yüzden özel başlangıç noktasını burada sıfırlıyoruz.
     final bool usedCustomStart = _routeStartPoint != null;
 
     if (!mounted) {
@@ -2526,20 +2554,15 @@ extension _HomePageLogicX on _HomePageState {
 
     try {
       // ========================================================
-      // KAMYON - ORS
-      // ========================================================
-      // ========================================================
       // KAMYON - TomTom Routing API
       // ========================================================
 
       if (vehicle == 'truck') {
-        // Kamyon profili: kullanıcının kaydettiği değerler
         final VehicleProfile truckProfile =
             _truckProfileToVehicleProfile(_truckProfile);
 
         final RouteService service = RouteService();
 
-        // ✅ Ana rota + alternatifleri TEK API çağrısında al
         List<RouteResult> allRoutes;
         try {
           allRoutes = await service.fetchAlternativeRoutes(
@@ -2549,7 +2572,6 @@ extension _HomePageLogicX on _HomePageState {
             alternatives: 2,
           );
         } catch (e) {
-          // Alternatif desteklenmezse düz rotayı dene
           debugPrint('⚠️ Alternatif rota alınamadı, ana rota çekiliyor: $e');
           allRoutes = <RouteResult>[
             await service.fetchRoute(
@@ -2568,9 +2590,8 @@ extension _HomePageLogicX on _HomePageState {
         final RouteResult result = allRoutes.first;
         final List<LatLng> points = result.points;
 
-        // ✅ TomTom'dan gelen alternatifleri kullan
         final List<List<LatLng>> truckAlternatives = allRoutes
-            .skip(1) // İlk eleman ana rotadır
+            .skip(1)
             .map((RouteResult r) => r.points)
             .where((List<LatLng> p) => p.isNotEmpty)
             .toList();
@@ -2608,7 +2629,11 @@ extension _HomePageLogicX on _HomePageState {
               : 'Rotayı takip edin.';
           _currentInstructionDistance =
               instructions.isNotEmpty ? instructions.first.distance : 0;
+          _closedRoadSections = result.closedRoads;
         });
+
+        // TomTom Traffic'ten kapalı yolları çek
+        _fetchTomTomTrafficIncidents(points);
 
         if (userLocation != null) {
           _isFollowingLocation = true;
@@ -2623,11 +2648,6 @@ extension _HomePageLogicX on _HomePageState {
         }
 
         _fitRouteOnMap(points);
-
-        _fetchRouteRestrictions(points);
-        _fetchTruckParkings(points);
-        _fetchFuelStations(points);
-        _fetchSpeedLimits(points);
 
         _drivingStartTime = DateTime.now();
         _fatigueWarningShown = false;
@@ -2654,6 +2674,7 @@ extension _HomePageLogicX on _HomePageState {
 
         return;
       }
+
       // ========================================================
       // OTOMOBİL - OSRM
       // ========================================================
@@ -2776,10 +2797,12 @@ extension _HomePageLogicX on _HomePageState {
 
           _currentInstructionDistance =
               instructions.isNotEmpty ? instructions.first.distance : 0;
+
+          _closedRoadSections = <ClosedRoadSection>[];
         });
 
-        // DÜZELTME (FIX): Aynı zoom kilitleme düzeltmesi
-        // otomobil (OSRM) kolu için.
+        _fetchTomTomTrafficIncidents(mainRoute);
+
         if (userLocation != null) {
           _isFollowingLocation = true;
           _moveMapWithDirection(
@@ -2795,11 +2818,6 @@ extension _HomePageLogicX on _HomePageState {
         _fitRouteOnMap(
           mainRoute,
         );
-
-        _fetchRouteRestrictions(mainRoute);
-        _fetchTruckParkings(mainRoute);
-        _fetchFuelStations(mainRoute);
-        _fetchSpeedLimits(mainRoute);
 
         _drivingStartTime = DateTime.now();
         _fatigueWarningShown = false;
@@ -2857,6 +2875,103 @@ extension _HomePageLogicX on _HomePageState {
       _showRouteError(
         'Rota hatası: $e',
       );
+    }
+  }
+
+  // ============================================================
+  // TOMTOM TRAFFIC - KAPALI YOLLARI ÇEK
+  // ============================================================
+  Future<void> _fetchTomTomTrafficIncidents(List<LatLng> routePoints) async {
+    if (routePoints.isEmpty) return;
+
+    double minLat = routePoints.first.latitude;
+    double maxLat = routePoints.first.latitude;
+    double minLng = routePoints.first.longitude;
+    double maxLng = routePoints.first.longitude;
+
+    for (final p in routePoints) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+
+    const double pad = 0.05;
+    minLat -= pad;
+    maxLat += pad;
+    minLng -= pad;
+    maxLng += pad;
+
+    final service = TomTomRouteService();
+
+    try {
+      final incidents = await service.fetchTrafficIncidents(
+        minPoint: LatLng(minLat, minLng),
+        maxPoint: LatLng(maxLat, maxLng),
+      );
+
+      if (incidents.isEmpty) {
+        debugPrint('🚧 TomTom Traffic: Trafik olayı bulunamadı.');
+        return;
+      }
+
+      final List<ClosedRoadSection> closedRoads = [];
+
+      for (final incident in incidents) {
+        final properties = incident['properties'] as Map<String, dynamic>?;
+        if (properties == null) continue;
+
+        final int? iconCategory = properties['iconCategory'] as int?;
+        if (iconCategory == null) continue;
+
+        if (![1, 6, 8, 9].contains(iconCategory)) continue;
+
+        final geometry = incident['geometry'] as Map<String, dynamic>?;
+        if (geometry == null) continue;
+
+        final String geoType = geometry['type']?.toString() ?? '';
+        final dynamic coords = geometry['coordinates'];
+
+        if (geoType == 'LineString' && coords is List) {
+          final List<LatLng> points = [];
+          for (final coord in coords) {
+            if (coord is List && coord.length >= 2) {
+              points.add(LatLng(
+                (coord[1] as num).toDouble(),
+                (coord[0] as num).toDouble(),
+              ));
+            }
+          }
+          if (points.isNotEmpty) {
+            closedRoads.add(ClosedRoadSection(
+              points: points,
+              reason: properties['events']?.toString() ?? 'Yol Kapalı',
+            ));
+          }
+        } else if (geoType == 'Point' && coords is List) {
+          final double lon = (coords[0] as num).toDouble();
+          final double lat = (coords[1] as num).toDouble();
+          closedRoads.add(ClosedRoadSection(
+            points: [
+              LatLng(lat - 0.0003, lon - 0.0003),
+              LatLng(lat + 0.0003, lon + 0.0003),
+            ],
+            reason: properties['description']?.toString() ?? 'Yol Kapalı',
+          ));
+        }
+      }
+
+      if (mounted && closedRoads.isNotEmpty) {
+        setState(() {
+          _closedRoadSections = closedRoads;
+        });
+        debugPrint(
+            '🚧 TomTom Traffic: ${closedRoads.length} kapalı yol bulundu');
+      } else {
+        debugPrint('🚧 TomTom Traffic: Yol kapalı olayı yok.');
+      }
+    } catch (e) {
+      debugPrint('🚧 TomTom Traffic HATASI: $e');
     }
   }
 

@@ -1,3 +1,4 @@
+// ignore_for_file: unnecessary_to_list_in_spreads
 // ignore_for_file: curly_braces_in_flow_control_structures, invalid_use_of_protected_member
 part of 'home_page.dart';
 
@@ -239,7 +240,6 @@ extension _HomePageUIX on _HomePageState {
       _fitRouteOnMap(fullRoute);
       _fetchRouteRestrictions(fullRoute);
       _fetchTruckParkings(fullRoute);
-      _fetchFuelStations(fullRoute);
       _fetchSpeedLimits(fullRoute);
 
       await _speak(
@@ -332,75 +332,6 @@ out center;''';
       if (mounted) setState(() => _truckParkings = parkings);
     } catch (e) {
       debugPrint('TRUCK PARKING ERROR: $e');
-    }
-  }
-
-  Future<void> _fetchFuelStations(List<LatLng> points) async {
-    if (points.isEmpty) return;
-    double minLat = points.first.latitude, maxLat = points.first.latitude;
-    double minLng = points.first.longitude, maxLng = points.first.longitude;
-    for (final p in points) {
-      if (p.latitude < minLat) minLat = p.latitude;
-      if (p.latitude > maxLat) maxLat = p.latitude;
-      if (p.longitude < minLng) minLng = p.longitude;
-      if (p.longitude > maxLng) maxLng = p.longitude;
-    }
-    const double pad = 0.05;
-    minLat -= pad;
-    maxLat += pad;
-    minLng -= pad;
-    maxLng += pad;
-
-    final String query = '''[out:json][timeout:25];
-(
-  node["amenity"="fuel"]["hgv"="yes"]($minLat,$minLng,$maxLat,$maxLng);
-  node["amenity"="fuel"]["truck"="yes"]($minLat,$minLng,$maxLat,$maxLng);
-  way["amenity"="fuel"]["hgv"="yes"]($minLat,$minLng,$maxLat,$maxLng);
-);
-out center;''';
-
-    try {
-      final response = await http.post(
-        Uri.parse('https://overpass-api.de/api/interpreter'),
-        body: query,
-        headers: const {'Content-Type': 'application/x-www-form-urlencoded'},
-      );
-      if (response.statusCode != 200) return;
-      final data = jsonDecode(response.body);
-      final List<dynamic> elements =
-          data['elements'] is List ? data['elements'] as List : <dynamic>[];
-      final List<_FuelStation> stations = <_FuelStation>[];
-      for (final dynamic element in elements) {
-        if (element is! Map) {
-          continue;
-        }
-        final tags = Map<String, dynamic>.from(element['tags'] as Map? ?? {});
-        double? lat, lon;
-        if (element['type']?.toString() == 'node') {
-          lat = (element['lat'] as num?)?.toDouble();
-          lon = (element['lon'] as num?)?.toDouble();
-        } else {
-          final center =
-              Map<String, dynamic>.from(element['center'] as Map? ?? {});
-          lat = (center['lat'] as num?)?.toDouble();
-          lon = (center['lon'] as num?)?.toDouble();
-        }
-        if (lat == null || lon == null) {
-          continue;
-        }
-        stations.add(_FuelStation(
-          location: LatLng(lat, lon),
-          name: tags['name']?.toString() ?? 'Yakıt İstasyonu',
-          hgvFriendly: tags['hgv']?.toString() == 'yes' ||
-              tags['truck']?.toString() == 'yes',
-          hasAdBlue: tags['adblue']?.toString() == 'yes' ||
-              tags['fuel:adblue']?.toString() == 'yes',
-          hasRestaurant: tags['restaurant']?.toString() == 'yes',
-        ));
-      }
-      if (mounted) setState(() => _fuelStations = stations);
-    } catch (e) {
-      debugPrint('FUEL STATION ERROR: $e');
     }
   }
 
@@ -622,6 +553,7 @@ out geom;''';
     minLng -= lngPad;
     maxLng += lngPad;
 
+    // ⬇️ GÜNCELLENMİŞ SORGU (Yeni etiketler eklendi)
     final String query = '''[out:json][timeout:25];
 (
   way["maxheight"]($minLat,$minLng,$maxLat,$maxLng);
@@ -632,6 +564,11 @@ out geom;''';
   way["access"="no"]($minLat,$minLng,$maxLat,$maxLng);
   way["highway"="construction"]($minLat,$minLng,$maxLat,$maxLng);
   way["motor_vehicle"="no"]($minLat,$minLng,$maxLat,$maxLng);
+  way["highway"]["access"="no"]($minLat,$minLng,$maxLat,$maxLng);
+  way["highway"]["vehicle"="no"]($minLat,$minLng,$maxLat,$maxLng);
+  way["highway"]["motor_vehicle"="no"]($minLat,$minLng,$maxLat,$maxLng);
+  node["barrier"="gate"]["access"="no"]($minLat,$minLng,$maxLat,$maxLng);
+  node["barrier"="bollard"]($minLat,$minLng,$maxLat,$maxLng);
 );
 out center;''';
 
@@ -651,12 +588,15 @@ out center;''';
           data['elements'] is List ? data['elements'] as List : <dynamic>[];
 
       final List<_RouteRestriction> restrictions = <_RouteRestriction>[];
+      // ⬇️ YENİ: Kapalı yollar için ayrı liste
+      final List<ClosedRoadSection> closedRoads = <ClosedRoadSection>[];
 
       for (final dynamic element in elements) {
         if (element is! Map) {
           continue;
         }
-        if (element['type']?.toString() != 'way') {
+        if (element['type']?.toString() != 'way' &&
+            element['type']?.toString() != 'node') {
           continue;
         }
 
@@ -673,6 +613,31 @@ out center;''';
 
         final LatLng location = LatLng(lat, lon);
 
+        // Kapalı yol tespiti
+        bool isClosed = false;
+        if (tags['access']?.toString() == 'no' ||
+            tags['access']?.toString() == 'private' ||
+            tags['highway']?.toString() == 'construction' ||
+            tags['vehicle']?.toString() == 'no' ||
+            tags['motor_vehicle']?.toString() == 'no' ||
+            tags['hgv']?.toString() == 'no' ||
+            tags['barrier']?.toString() == 'gate' ||
+            tags['barrier']?.toString() == 'bollard') {
+          isClosed = true;
+        }
+
+        if (isClosed) {
+          // Kapalı yolu haritada çizmek için küçük bir çizgi oluştur
+          closedRoads.add(ClosedRoadSection(
+            points: [
+              LatLng(lat - 0.0003, lon - 0.0003),
+              LatLng(lat + 0.0003, lon + 0.0003),
+            ],
+            reason: 'Kapalı Yol',
+          ));
+        }
+
+        // Diğer kısıtlamalar (maxheight vb.)
         if (tags['maxheight'] != null) {
           restrictions.add(_RouteRestriction(
             location: location,
@@ -735,18 +700,19 @@ out center;''';
       if (mounted) {
         setState(() {
           _routeRestrictions = restrictions;
+          // ⬇️ YENİ: Overpass'tan gelen kapalı yolları ana listeye ekle
+          if (closedRoads.isNotEmpty) {
+            _closedRoadSections = closedRoads;
+            debugPrint('🚧 Overpass: ${closedRoads.length} kapalı yol bulundu');
+          }
         });
 
-        // API cevabı rota hesaplandıktan sonra geldiği için kontrol burada
-        // yapılmalı. Rota hesaplama fonksiyonundaki hemen-sonraki kontrol,
-        // liste henüz boş olduğu için etkisiz kalıyordu.
         _checkRouteRestrictions();
       }
     } catch (e) {
-      debugPrint('OVERPASS ERROR: \$e');
+      debugPrint('OVERPASS ERROR: $e');
     }
   }
-
   // ============================================================
   // KISITLAMA İKONU
   // ============================================================
@@ -2294,20 +2260,6 @@ out center;''';
                       },
                     ),
                     _labeledControlButton(
-                      heroTag: 'fuel_stations',
-                      icon: _showFuelStations
-                          ? Icons.local_gas_station
-                          : Icons.local_gas_station_outlined,
-                      label: 'Yakıt İstasyonları',
-                      active: _showFuelStations,
-                      activeColor: Colors.blue.shade700,
-                      onPressed: () {
-                        setState(() {
-                          _showFuelStations = !_showFuelStations;
-                        });
-                      },
-                    ),
-                    _labeledControlButton(
                       heroTag: 'stops',
                       icon: Icons.flag,
                       label: _stops.isEmpty
@@ -2545,9 +2497,9 @@ out center;''';
                     );
                   },
                 ).toList(),
-              ),
+              ), // ⬅️ BURAYA DİKKAT: Kapanış parantezi ve virgül eklendi
 
-            // ANA ROTA
+            // ANA ROTA (Önce çizilsin)
             if (routePoints.isNotEmpty)
               PolylineLayer(
                 polylines: [
@@ -2557,6 +2509,23 @@ out center;''';
                     color: routeColor,
                   ),
                 ],
+              ),
+
+            // KAPALI YOLLAR (Sonra çizilsin, üstte görünsün)
+            if (_closedRoadSections.isNotEmpty)
+              PolylineLayer(
+                polylines: _closedRoadSections
+                    .map(
+                      (ClosedRoadSection section) => Polyline(
+                        points: section.points,
+                        strokeWidth: 9.0, // ⬅️ Daha kalın
+                        color: Colors.red
+                            .withValues(alpha: 1.0), // ⬅️ Tam opak kırmızı
+                        borderColor: Colors.white,
+                        borderStrokeWidth: 2.5, // ⬅️ Daha belirgin beyaz kenar
+                      ),
+                    )
+                    .toList(),
               ),
 
             // MARKERLAR
@@ -2594,43 +2563,6 @@ out center;''';
                             Icons.local_shipping,
                             color: Colors.white,
                             size: 20,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                if (_showFuelStations)
-                  ..._fuelStations.map(
-                    (_FuelStation f) => Marker(
-                      point: f.location,
-                      width: 36,
-                      height: 36,
-                      child: GestureDetector(
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                '${f.name}${f.hgvFriendly ? ' · LKW Uyumlu' : ''}${f.hasAdBlue ? ' · AdBlue' : ''}${f.hasRestaurant ? ' · Restoran' : ''}',
-                              ),
-                              duration: const Duration(seconds: 4),
-                            ),
-                          );
-                        },
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade700,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                            boxShadow: const [
-                              BoxShadow(color: Colors.black38, blurRadius: 4),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.local_gas_station,
-                            color: Colors.white,
-                            size: 18,
                           ),
                         ),
                       ),
@@ -2687,14 +2619,58 @@ out center;''';
                           ),
                         ),
                       ),
+                // ⬇️⬇️⬇️ YENİ EKLENEN: KAPALI YOLLAR İÇİN YASAK İKONU ⬇️⬇️⬇️
+                if (_closedRoadSections.isNotEmpty)
+                  ..._closedRoadSections
+                      .map((ClosedRoadSection section) {
+                        if (section.points.isEmpty) return null;
+                        final LatLng centerPoint =
+                            section.points[section.points.length ~/ 2];
+                        return Marker(
+                          point: centerPoint,
+                          width: 32,
+                          height: 32,
+                          child: GestureDetector(
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(section.reason),
+                                  duration: const Duration(seconds: 4),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black38,
+                                    blurRadius: 4,
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.do_not_disturb_on,
+                                color: Colors.red,
+                                size: 28,
+                              ),
+                            ),
+                          ),
+                        );
+                      })
+                      .whereType<Marker>()
+                      .toList(),
+                // ⬆️⬆️⬆️ YENİ EKLENEN BİTİŞ ⬆️⬆️⬆️
                 if (userLocation != null)
                   Marker(
                     point: userLocation!,
                     width: 55,
                     height: 55,
                     child: Transform.rotate(
-                      angle:
-                          _navigationMode ? 0 : _currentHeading * math.pi / 180,
+                      angle: _navigationMode
+                          ? -_currentHeading * math.pi / 180
+                          : 0,
                       child: Container(
                         decoration: const BoxDecoration(
                           color: Colors.white,

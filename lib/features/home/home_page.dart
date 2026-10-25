@@ -18,6 +18,7 @@ import '../../theme/app_theme.dart';
 import '../models/truck_profile.dart';
 import '../services/truck_profile_storage.dart';
 import '../widgets/truck_profile_sheet.dart';
+import '../../services/tomtom_route_service.dart';
 
 part 'home_page_logic.dart';
 part 'home_page_ui.dart';
@@ -158,22 +159,6 @@ class _TruckParking {
     this.hasRestaurant = false,
     this.hasShower = false,
     this.hasFuel = false,
-  });
-}
-
-class _FuelStation {
-  final LatLng location;
-  final String name;
-  final bool hgvFriendly;
-  final bool hasAdBlue;
-  final bool hasRestaurant;
-
-  _FuelStation({
-    required this.location,
-    required this.name,
-    this.hgvFriendly = false,
-    this.hasAdBlue = false,
-    this.hasRestaurant = false,
   });
 }
 
@@ -357,11 +342,7 @@ class _HomePageState extends State<HomePage> {
 
   List<_TruckParking> _truckParkings = <_TruckParking>[];
 
-  List<_FuelStation> _fuelStations = <_FuelStation>[];
-
   bool _showTruckParkings = false;
-
-  bool _showFuelStations = false;
 
   List<_SpeedLimitSegment> _speedLimits = <_SpeedLimitSegment>[];
 
@@ -386,6 +367,9 @@ class _HomePageState extends State<HomePage> {
   DateTime? _lastRecalculation;
   DateTime? _lastOffRouteCheck; // ⬅️ YENİ
   int _lastRouteIndex = 0; // ⬅️ YENİ
+
+  // ⬇️ YENİ EKLE: Kapalı yollar listesi
+  List<ClosedRoadSection> _closedRoadSections = [];
   // ============================================================
   // FAVORİLER
   // ============================================================
