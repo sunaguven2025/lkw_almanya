@@ -1,0 +1,1183 @@
+part of 'home_page.dart';
+
+// setState burada bir extension üzerinden çağrılıyor. Extension'lar Dart'ın
+// miras zincirinin parçası sayılmadığı için analyzer bunu "protected üyeye
+// dışarıdan erişim" olarak işaretliyor; ancak bu extension SADECE
+// _HomePageState (bir State<HomePage> alt sınıfı) üzerinde tanımlı olduğundan
+// çağrı güvenli ve doğrudur. Bu dosyaya özel olarak susturuyoruz.
+// ignore_for_file: invalid_use_of_protected_member
+
+// ================================================================
+// İŞ MANTIĞI (konum, rota hesaplama, favoriler, ses, arama, duraklar,
+// kısıtlamalar, yakıt/TIR parkı verileri vb.)
+// Bu dosya home_page.dart'ın parçasıdır (part of), bu yüzden
+// _HomePageState'in private alan/metodlarına doğrudan erişebilir.
+// ================================================================
+
+extension _HomePageLogicX on _HomePageState {
+  // ============================================================
+  // FAVORİLERİ YÜKLE
+  // ============================================================
+
+  Future<void> _loadFavorites() async {
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+
+      final String? saved = prefs.getString(
+        _HomePageState._favoritesStorageKey,
+      );
+
+      if (saved == null || saved.isEmpty) {
+        if (!mounted) {
+          return;
+        }
+
+        setState(() {
+          _favorites = <_FavoritePlace>[];
+          _favoritesLoaded = true;
+        });
+
+        return;
+      }
+
+      final dynamic decoded = jsonDecode(saved);
+
+      if (decoded is! List) {
+        if (mounted) {
+          setState(() {
+            _favoritesLoaded = true;
+          });
+        }
+        return;
+      }
+
+      final List<_FavoritePlace> loaded = <_FavoritePlace>[];
+
+      for (final dynamic item in decoded) {
+        if (item is Map) {
+          try {
+            loaded.add(
+              _FavoritePlace.fromJson(
+                Map<String, dynamic>.from(item),
+              ),
+            );
+          } catch (e) {
+            debugPrint(
+              'FAVORITE LOAD ITEM ERROR: $e',
+            );
+          }
+        }
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _favorites = loaded;
+        _favoritesLoaded = true;
+      });
+    } catch (e) {
+      debugPrint(
+        'FAVORITES LOAD ERROR: $e',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _favoritesLoaded = true;
+      });
+    }
+  }
+
+  // ============================================================
+  // FAVORİLERİ KAYDET
+  // ============================================================
+
+  Future<void> _saveFavorites() async {
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+
+      final String encoded = jsonEncode(
+        _favorites
+            .map(
+              (_FavoritePlace place) => place.toJson(),
+            )
+            .toList(),
+      );
+
+      await prefs.setString(
+        _HomePageState._favoritesStorageKey,
+        encoded,
+      );
+    } catch (e) {
+      debugPrint(
+        'FAVORITES SAVE ERROR: $e',
+      );
+    }
+  }
+
+  // ============================================================
+  // KONUMU FAVORİ OLARAK KAYDET
+  // ============================================================
+
+  Future<void> _saveCurrentLocationAsFavorite() async {
+    if (userLocation == null) {
+      await loadLocation();
+
+      if (userLocation == null) {
+        _showRouteError(
+          'Mevcut konum alınamadı.',
+        );
+
+        return;
+      }
+    }
+
+    final LatLng location = userLocation!;
+
+    final TextEditingController nameController = TextEditingController();
+
+    final TextEditingController addressControllerForFavorite =
+        TextEditingController();
+
+    String detectedAddress = '';
+
+    try {
+      final String url = 'https://nominatim.openstreetmap.org/reverse'
+          '?lat=${location.latitude}'
+          '&lon=${location.longitude}'
+          '&format=json'
+          '&zoom=18';
+
+      final http.Response response = await http.get(
+        Uri.parse(url),
+        headers: const {
+          'User-Agent': 'lkw_almanya_navigation_app',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final dynamic data = jsonDecode(
+          response.body,
+        );
+
+        if (data is Map) {
+          detectedAddress = data['display_name']?.toString() ?? '';
+        }
+      }
+    } catch (e) {
+      debugPrint(
+        'REVERSE GEOCODING ERROR: $e',
+      );
+    }
+
+    addressControllerForFavorite.text = detectedAddress;
+
+    if (!mounted) {
+      nameController.dispose();
+      addressControllerForFavorite.dispose();
+      return;
+    }
+
+    bool dialogClosed = false;
+
+    final bool? save = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(
+                Icons.location_on,
+                color: AppTheme.primaryBlue,
+              ),
+              SizedBox(
+                width: 8,
+              ),
+              Text(
+                'Konumu Kaydet',
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  autofocus: true,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: 'Yer adı',
+                    hintText: 'Örneğin: Ev, Depo, Müşteri 1',
+                    prefixIcon: Icon(
+                      Icons.bookmark,
+                    ),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(
+                  height: 14,
+                ),
+                TextField(
+                  controller: addressControllerForFavorite,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Adres',
+                    prefixIcon: Icon(
+                      Icons.home,
+                    ),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(
+                  height: 12,
+                ),
+                Text(
+                  'GPS: ${location.latitude.toStringAsFixed(6)}, '
+                  '${location.longitude.toStringAsFixed(6)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                if (dialogClosed) {
+                  return;
+                }
+
+                dialogClosed = true;
+
+                FocusScope.of(dialogContext).unfocus();
+
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text(
+                'İptal',
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                if (dialogClosed) {
+                  return;
+                }
+
+                final String enteredName = nameController.text.trim();
+
+                if (enteredName.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Lütfen bir yer adı girin.',
+                      ),
+                    ),
+                  );
+
+                  return;
+                }
+
+                dialogClosed = true;
+
+                FocusScope.of(dialogContext).unfocus();
+
+                Navigator.of(dialogContext).pop(true);
+              },
+              icon: const Icon(
+                Icons.save,
+              ),
+              label: const Text(
+                'Kaydet',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    await Future<void>.delayed(
+      const Duration(
+        milliseconds: 100,
+      ),
+    );
+
+    final String name = nameController.text.trim();
+
+    final String address = addressControllerForFavorite.text.trim();
+
+    nameController.dispose();
+    addressControllerForFavorite.dispose();
+
+    if (!mounted) {
+      return;
+    }
+
+    if (save != true || name.isEmpty) {
+      return;
+    }
+
+    final _FavoritePlace favorite = _FavoritePlace(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      name: name,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      address: address,
+    );
+
+    setState(() {
+      _favorites.insert(
+        0,
+        favorite,
+      );
+    });
+
+    await _saveFavorites();
+
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '$name favorilere kaydedildi.',
+        ),
+        action: SnackBarAction(
+          label: 'Yerler',
+          onPressed: _showFavorites,
+        ),
+      ),
+    );
+
+    await _speak(
+      _voiceLanguage == 'tr-TR'
+          ? '$name favorilere kaydedildi.'
+          : _voiceLanguage == 'en-US'
+              ? '$name has been saved to your places.'
+              : '$name wurde in Ihren Favoriten gespeichert.',
+    );
+  }
+
+  // ============================================================
+  // FAVORİ SİL
+  // ============================================================
+
+  Future<void> _deleteFavorite(
+    _FavoritePlace favorite,
+  ) async {
+    setState(() {
+      _favorites.removeWhere(
+        (_FavoritePlace item) => item.id == favorite.id,
+      );
+    });
+
+    await _saveFavorites();
+
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${favorite.name} silindi.',
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // FAVORİLER PENCERESİ
+  // ============================================================
+
+  void _showFavorites() {
+    if (!_favoritesLoaded) {
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) {
+        return SafeArea(
+          child: SizedBox(
+            height: MediaQuery.of(context).size.height * 0.72,
+            child: Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.bookmarks,
+                        color: AppTheme.primaryBlue,
+                      ),
+                      SizedBox(
+                        width: 10,
+                      ),
+                      Text(
+                        'Yerler / Favoriler',
+                        style: TextStyle(
+                          fontSize: 21,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(),
+                Expanded(
+                  child: _favorites.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(30),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.bookmark_border,
+                                  size: 70,
+                                  color: Colors.grey.shade400,
+                                ),
+                                const SizedBox(
+                                  height: 15,
+                                ),
+                                const Text(
+                                  'Henüz kayıtlı yer yok.',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(
+                                  height: 8,
+                                ),
+                                const Text(
+                                  'Bulunduğunuz konumu kaydetmek için '
+                                  'haritadaki Konum Al düğmesini kullanın.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          itemCount: _favorites.length,
+                          separatorBuilder: (
+                            BuildContext context,
+                            int index,
+                          ) {
+                            return const Divider(
+                              height: 1,
+                            );
+                          },
+                          itemBuilder: (
+                            BuildContext context,
+                            int index,
+                          ) {
+                            final _FavoritePlace favorite = _favorites[index];
+
+                            return ListTile(
+                              leading: const CircleAvatar(
+                                backgroundColor: AppTheme.primaryBlue,
+                                child: Icon(
+                                  Icons.bookmark,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              title: Text(
+                                favorite.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (favorite.address.isNotEmpty)
+                                    Text(
+                                      favorite.address,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  const SizedBox(
+                                    height: 3,
+                                  ),
+                                  Text(
+                                    '${favorite.latitude.toStringAsFixed(5)}, '
+                                    '${favorite.longitude.toStringAsFixed(5)}',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              isThreeLine: true,
+                              trailing: PopupMenuButton<String>(
+                                onSelected: (
+                                  String value,
+                                ) {
+                                  if (value == 'delete') {
+                                    _deleteFavorite(
+                                      favorite,
+                                    );
+                                  }
+                                },
+                                itemBuilder: (
+                                  BuildContext context,
+                                ) {
+                                  return const [
+                                    PopupMenuItem<String>(
+                                      value: 'delete',
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.delete,
+                                            color: Colors.red,
+                                          ),
+                                          SizedBox(
+                                            width: 8,
+                                          ),
+                                          Text(
+                                            'Sil',
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ];
+                                },
+                              ),
+                              onTap: () {
+                                Navigator.pop(
+                                  sheetContext,
+                                );
+
+                                _selectFavorite(
+                                  favorite,
+                                );
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // FAVORİ SEÇ
+  // ============================================================
+
+  void _selectFavorite(
+    _FavoritePlace favorite,
+  ) {
+    final LatLng point = LatLng(
+      favorite.latitude,
+      favorite.longitude,
+    );
+
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      destination = point;
+
+      addressController.text =
+          favorite.address.isNotEmpty ? favorite.address : favorite.name;
+
+      searchSuggestions = <dynamic>[];
+
+      routePoints = <LatLng>[];
+
+      alternativeRoutePoints = <List<LatLng>>[];
+
+      _navigationStarted = false;
+    });
+
+    mapController.rotate(
+      0,
+    );
+
+    mapController.move(
+      point,
+      14.0,
+    );
+
+    showVehicleSelector(
+      point,
+    );
+  }
+
+  // ============================================================
+  // SES SİSTEMİ
+  // ============================================================
+
+  Future<void> _initializeVoice() async {
+    try {
+      final bool available = await _speech.initialize(
+        onStatus: (String status) {
+          if (!mounted) {
+            return;
+          }
+
+          if (status == 'done' || status == 'notListening') {
+            setState(() {
+              _isListening = false;
+            });
+          }
+        },
+        onError: (dynamic error) {
+          if (!mounted) {
+            return;
+          }
+
+          setState(() {
+            _isListening = false;
+          });
+
+          debugPrint(
+            'SPEECH ERROR: ${error.errorMsg}',
+          );
+        },
+      );
+
+      await _tts.setLanguage(
+        _voiceLanguage,
+      );
+
+      // DÜZELTME (FIX): 0.48 çok yavaştı, anonslar geç geliyordu.
+      // 0.55 normal hız; hâlâ yavaş gelirse 0.6-0.7 yapılabilir.
+      await _tts.setSpeechRate(
+        0.55,
+      );
+
+      // 🎙️ SES TONU (PITCH) AYARI:
+      // Samsung cihazlar setVoice'ı yoksaydığı için sesi zorla kalınlaştırıyoruz
+      await _tts.setPitch(
+        0.6,
+      );
+
+      // ============================================================
+      // 🎙️ ERKEK SESİ SEÇİMİ
+      // ============================================================
+      try {
+        final List<dynamic> voices = await _tts.getVoices;
+
+        dynamic germanMaleNetworkVoice;
+        dynamic germanMaleVoice;
+
+        for (var voice in voices) {
+          final String name = voice['name'].toString().toLowerCase();
+          final String locale = voice['locale'].toString().toLowerCase();
+          if (locale.contains('de-de') ||
+              locale.contains('de_de') ||
+              locale.contains('de')) {
+            if (name.contains('deb')) {
+              if (name.contains('network')) {
+                germanMaleNetworkVoice = voice;
+              } else {
+                germanMaleVoice ??= voice;
+              }
+            }
+          }
+        }
+
+        final selectedVoice = germanMaleNetworkVoice ?? germanMaleVoice;
+
+        if (selectedVoice != null) {
+          final Map<String, String> voiceMap = Map<String, String>.from(
+            selectedVoice as Map,
+          );
+          await _tts.setVoice(voiceMap);
+          debugPrint('✅ ERKEK SESİ SEÇİLDİ: ${voiceMap['name']}');
+        } else {
+          debugPrint(
+              '⚠️ Uygun bir Almanca erkek sesi bulunamadı. Varsayılan ses kullanılıyor.');
+        }
+      } catch (e) {
+        debugPrint('SES LİSTESİ ALINAMADI: $e');
+      }
+      // ============================================================
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _speechAvailable = available;
+      });
+    } catch (e) {
+      debugPrint(
+        'VOICE INITIALIZATION ERROR: $e',
+      );
+    }
+  }
+
+  // ============================================================
+// SES DİLİ
+// ============================================================
+
+  Future<void> _changeVoiceLanguage(
+    String language,
+    String name,
+  ) async {
+    try {
+      await _speech.stop();
+
+      await _tts.stop();
+
+      await _tts.isLanguageAvailable(
+        language,
+      );
+
+      await _tts.setLanguage(
+        language,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _voiceLanguage = language;
+        _voiceLanguageName = name;
+        _isListening = false;
+      });
+
+      String message;
+
+      if (language == 'de-DE') {
+        message = 'Die Sprache wurde auf Deutsch eingestellt.';
+      } else {
+        message = 'Die Sprache wurde auf Deutsch eingestellt.';
+      }
+
+      await _speak(
+        message,
+      );
+    } catch (e) {
+      debugPrint(
+        'VOICE LANGUAGE ERROR: $e',
+      );
+
+      _showRouteError(
+        'Ses dili değiştirilemedi.',
+      );
+    }
+  }
+
+// ============================================================
+// SES DİLİ SEÇİCİ (Bottom Sheet)
+// ============================================================
+
+  void _showVoiceLanguageSelector() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) {
+        return SafeArea(
+            child: Padding(
+          padding: const EdgeInsets.only(
+            left: 16,
+            right: 16,
+            bottom: 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Sesli Navigasyon Dili',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(
+                height: 12,
+              ),
+              ListTile(
+                leading: const Text(
+                  '🇩🇪',
+                  style: TextStyle(
+                    fontSize: 28,
+                  ),
+                ),
+                title: const Text(
+                  'Deutsch',
+                ),
+                trailing: _voiceLanguage == 'de-DE'
+                    ? const Icon(
+                        Icons.check,
+                        color: Colors.green,
+                      )
+                    : null,
+                onTap: () {
+                  Navigator.pop(
+                    sheetContext,
+                  );
+
+                  _changeVoiceLanguage(
+                    'de-DE',
+                    'Deutsch',
+                  );
+                },
+              ),
+            ],
+          ),
+        ));
+      },
+    );
+  }
+
+// ============================================================
+// SESLİ KOMUT
+// ============================================================
+
+  Future<void> _startListening() async {
+    if (!_speechAvailable) {
+      await _initializeVoice();
+    }
+
+    if (!_speechAvailable) {
+      if (!mounted) {
+        return;
+      }
+
+      _showRouteError(
+        'Sesli komut kullanılamıyor. Mikrofon iznini kontrol edin.',
+      );
+
+      return;
+    }
+
+    if (_isListening) {
+      await _stopListening();
+      return;
+    }
+
+    setState(() {
+      _isListening = true;
+      _voiceText = '';
+    });
+
+    await _speech.listen(
+      onResult: (result) {
+        if (!mounted) {
+          return;
+        }
+
+        setState(() {
+          _voiceText = result.recognizedWords;
+        });
+
+        if (result.finalResult && result.recognizedWords.trim().isNotEmpty) {
+          _processVoiceCommand(
+            result.recognizedWords,
+          );
+        }
+      },
+      listenOptions: stt.SpeechListenOptions(
+        localeId: 'de-DE',
+        // DÜZELTME (FIX): confirmation modu her kelimede
+        // duraksıyordu; sesli arama çok geç cevap veriyordu.
+        // dictation modu konuşma bitene kadar kesintisiz dinler.
+        listenMode: stt.ListenMode.dictation,
+      ),
+    );
+  }
+
+  Future<void> _stopListening() async {
+    await _speech.stop();
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isListening = false;
+    });
+  }
+
+  Future<void> _processVoiceCommand(
+    String command,
+  ) async {
+    await _stopListening();
+
+    final String text = command.trim();
+
+    if (text.isEmpty) {
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _voiceText = text;
+      addressController.text = text;
+    });
+
+    String searchText = text;
+
+    searchText = searchText
+        .replaceAll(
+          RegExp(
+            r'\b(navigasyon|navigation|rota|route|'
+            r'git|g[oö]tür|götür|oluştur|olustur|'
+            r'fahrt|fahren|weiterfahrt|ziel|'
+            r'başlat|baslat|start|los)\b',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .trim();
+
+    searchText = searchText
+        .replaceAll(
+          RegExp(
+            r'\b(kamyon|lkw|truck|otomobil|araba|'
+            r'auto|car|lastkraftwagen|lastwagen)\b',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .trim();
+
+    if (searchText.isEmpty) {
+      searchText = text;
+    }
+
+    await searchAddress(
+      searchText,
+    );
+  }
+
+// ============================================================
+// TTS
+// ============================================================
+
+  Future<void> _speak(
+    String text,
+  ) async {
+    try {
+      await _tts.stop();
+
+      // ⚠️ DÜZELTME: TTS motoru bazen dil ayarını unutuyor
+      // (özellikle web'de). Her konuşmada dili zorla.
+      // Her zaman Almanca konuş
+      await _tts.setLanguage('de-DE');
+
+      await _tts.speak(
+        text,
+      );
+    } catch (e) {
+      debugPrint(
+        'TTS ERROR: $e',
+      );
+    }
+  }
+
+  // ============================================================
+  // KONUM
+  // ============================================================
+
+  Future<void> loadLocation() async {
+    try {
+      final Position position = await getUserLocation();
+
+      if (!mounted) {
+        return;
+      }
+
+      if (position.accuracy > 35.0) {
+        debugPrint(
+          'GPS accuracy too low, skipped: ${position.accuracy}m',
+        );
+        return;
+      }
+
+      final LatLng location = LatLng(
+        position.latitude,
+        position.longitude,
+      );
+
+      setState(() {
+        userLocation = location;
+        _isFollowingLocation = true;
+
+        if (position.heading >= 0 && position.heading.isFinite) {
+          _currentHeading = position.heading;
+        }
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_isFollowingLocation) {
+          return;
+        }
+
+        try {
+          final currentCenter = mapController.camera.center;
+          final distanceMeters = const Distance().as(
+            LengthUnit.Meter,
+            currentCenter,
+            location,
+          );
+
+          if (distanceMeters > 20) {
+            mapController.move(
+              location,
+              13.5,
+            );
+          }
+        } catch (e) {
+          debugPrint('MAP MOVE ERROR (loadLocation): $e');
+        }
+      });
+
+      _startPositionTracking();
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Konum alınamadı: $e',
+          ),
+        ),
+      );
+    }
+  }
+
+  // ============================================================
+  // KONUM TAKİBİ
+  // ============================================================
+
+  void _startPositionTracking() {
+    _positionSubscription?.cancel();
+
+    const LocationSettings settings = LocationSettings(
+      accuracy: LocationAccuracy.bestForNavigation,
+      distanceFilter: 20,
+    );
+
+    _positionSubscription = Geolocator.getPositionStream(
+      locationSettings: settings,
+    ).listen(
+      (Position position) {
+        if (!mounted) {
+          return;
+        }
+
+        if (position.accuracy > 35.0) {
+          debugPrint(
+            'GPS stream skipped (low accuracy): ${position.accuracy}m',
+          );
+          return;
+        }
+
+        final LatLng nextLocation = LatLng(
+          position.latitude,
+          position.longitude,
+        );
+
+        if (userLocation == null) {
+          setState(() {
+            userLocation = nextLocation;
+            _isFollowingLocation = true;
+          });
+
+          if (mapController.camera.center != nextLocation) {
+            mapController.move(
+              nextLocation,
+              15.0,
+            );
+          }
+          return;
+        }
+
+        final double distMeters = const Distance().as(
+          LengthUnit.Meter,
+          userLocation!,
+          nextLocation,
+        );
+
+        if (distMeters < 6.0) {
+          return;
+        }
+
+        double heading = _currentHeading;
+
+        if (_navigationStarted && routePoints.length >= 2) {
+          heading = _routeBearing(nextLocation);
+        } else if (position.heading >= 0 &&
+            position.heading.isFinite &&
+            position.speed >= 0.5) {
+          heading = position.heading;
+        }
+
+        setState(() {
+          userLocation = nextLocation;
+          _currentHeading = heading;
+        });
+
+        if (_isFollowingLocation) {
+          final currentCenter = mapController.camera.center;
+          final centerDistanceMeters = const Distance().as(
+            LengthUnit.Meter,
+            currentCenter,
+            nextLocation,
+          );
+
+          final now = DateTime.now();
+
+          final bool shouldFollow =
+              centerDistanceMeters > 18 ||
+              _lastMapFollowAt == null ||
+              now.difference(_lastMapFollowAt!) >
+                  const Duration(milliseconds: 1200);
+
+          if (shouldFollow) {
+            _lastMapFollowAt = now;
+            mapController.move(
+              nextLocation,
+              _navigationStarted ? 15.5 : 14.5,
+            );
+          }
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        debugPrint('GPS STREAM ERROR: $error');
+      },
+    );
+  }
+
+  // ============================================================
+  // GÜNCEL KONUM ALMA YARDIMCISI
+  // ============================================================
+}
