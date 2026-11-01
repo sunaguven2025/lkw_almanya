@@ -1831,11 +1831,13 @@ out center;''';
     // panel durum çubuğunun (saat/sinyal) arkasında kalmasın diye
     // üst güvenli alan boşluğu manuel olarak ekleniyor.
     final double topSafeArea = MediaQuery.of(context).padding.top;
+    final bool isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Positioned(
       top: 15 + topSafeArea,
-      left: 15,
-      right: 15,
+      left: isLandscape ? 100 : 15,
+      right: isLandscape ? 100 : 15,
       child: Container(
         padding: const EdgeInsets.all(
           14,
@@ -2369,6 +2371,44 @@ out center;''';
           ),
 
           const SizedBox(height: 4),
+
+          // ⬇️ YENİ EKLE: HIZ GÖSTERGESİ (Sağ alt, yuvarlak)
+          if (_navigationStarted)
+            Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              width: 65,
+              height: 65,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.green, width: 3),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black26, blurRadius: 6),
+                ],
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      (_currentSpeed * 3.6).toStringAsFixed(0),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
+                    ),
+                    const Text(
+                      'km/s',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
           // KONUMUM (ana buton)
           FloatingActionButton(

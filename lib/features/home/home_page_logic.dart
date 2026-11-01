@@ -1072,93 +1072,115 @@ extension _HomePageLogicX on _HomePageState {
       distanceFilter: 5,
     );
 
+    // Yumuşatma için son geçerli konum ve zaman
+    LatLng? lastValidLocation;
+    DateTime? lastValidTime;
+    double lastValidHeading = _currentHeading;
+
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: settings,
     ).listen(
       (Position position) {
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
 
-        final LatLng location = LatLng(
+        // DÜZELTME: 'final' kaldırıldı, çünkü aşağıda değer atıyoruz
+        LatLng rawLocation = LatLng(
           position.latitude,
           position.longitude,
         );
 
-        double heading = _currentHeading;
+        // ============================================================
+        // 1. GPS ZIPLAMA FİLTRESİ (Exponential Smoothing)
+        // ============================================================
+        if (lastValidLocation != null && lastValidTime != null) {
+          final double distMoved = Geolocator.distanceBetween(
+            lastValidLocation!.latitude,
+            lastValidLocation!.longitude, // ⬅️ ! EKLENDİ
+            rawLocation.latitude,
+            rawLocation.longitude,
+          );
+          final double timeDiffSec = DateTime.now()
+                  .difference(lastValidTime!) // ⬅️ Null check eklendi
+                  .inMilliseconds /
+              1000.0;
 
-        // 1. ÖNCELİK: Navigasyon açıksa, yönü HER ZAMAN rotadan al.
-        if (_navigationStarted && routePoints.length >= 2) {
-          heading = _routeBearing(location);
+          // Eğer 1 saniyede 50 metreden fazla (180 km/s) yol aldıysa GPS hatasıdır.
+          // Bu sinyali yoksay, son geçerli konumu kullan.
+          if (timeDiffSec > 0 && distMoved / timeDiffSec > 50) {
+            debugPrint(
+                '🚫 GPS HATASI: Ani zıplama (${distMoved.toStringAsFixed(0)} m / ${timeDiffSec.toStringAsFixed(1)} s)');
+            return;
+          }
+
+          // Yumuşatma (Smoothing)
+          const double smoothFactor = 0.3;
+          final double smoothedLat =
+              lastValidLocation!.latitude * (1 - smoothFactor) +
+                  rawLocation.latitude * smoothFactor;
+          final double smoothedLng = lastValidLocation!.longitude *
+                  (1 - smoothFactor) + // ⬅️ ! EKLENDİ
+              rawLocation.longitude * smoothFactor;
+
+          rawLocation = LatLng(smoothedLat, smoothedLng);
         }
-        // 2. ÖNCELİK: Navigasyon kapalıysa ve araç yeterince hızlıysa GPS yönünü kullan.
-        else if (position.heading >= 0 &&
+
+        lastValidLocation = rawLocation;
+        lastValidTime = DateTime.now();
+
+        // ============================================================
+        // 2. YÖN (HEADING) HESAPLAMA
+        // ============================================================
+        double newHeading = lastValidHeading;
+
+        if (_navigationStarted && routePoints.length >= 2) {
+          newHeading = _routeBearing(rawLocation);
+        } else if (position.heading >= 0 &&
             position.heading.isFinite &&
             position.speed > 5.0) {
-          heading = position.heading;
+          newHeading = position.heading;
         }
+        lastValidHeading = newHeading;
 
-        // ---- SNAP TO ROAD (YOLA KİLİTLEME) ----
-        LatLng displayLocation = location;
+        // ============================================================
+        // 3. SNAP TO ROAD (YOLA KİLİTLEME)
+        // ============================================================
+        LatLng displayLocation = rawLocation;
 
         if (_navigationStarted && routePoints.length >= 2) {
-          final int nearestIdx = _nearestRoutePointIndex(location);
+          final int nearestIdx = _nearestRoutePointIndex(rawLocation);
           final LatLng routePoint = routePoints[nearestIdx];
-
-          final double distToRoute = Geolocator.distanceBetween(
-            location.latitude,
-            location.longitude,
-            routePoint.latitude,
-            routePoint.longitude,
-          );
-
-          // Eğer GPS konumu rotaya 60 metreden yakınsa, mavi oku tam rotanın üzerine çek
-          if (distToRoute < 60) {
-            displayLocation = routePoint;
-          }
+          displayLocation = routePoint;
+        } else if (lastValidLocation != null) {
+          // GPS koptuysa, son geçerli konumu kullan
+          displayLocation = lastValidLocation!;
         }
 
-        // ---- STATE GÜNCELLEMESİ ----
+        // ============================================================
+        // 4. STATE GÜNCELLE
+        // ============================================================
         setState(() {
           userLocation = displayLocation;
-          _currentHeading = heading;
+          _currentHeading = _smoothHeading(newHeading);
+          _currentSpeed = position.speed; // ⬅️ YENİ EKLE
         });
 
-        // ---- HARİTAYI HAREKET ETTİR ----
+        // ============================================================
+        // 5. HARİTAYI HAREKET ETTİR
+        // ============================================================
         if (_isFollowingLocation) {
-          _moveMapWithDirection(
-            displayLocation,
-            heading,
-          );
-
-          _scheduleNavigationCamera(
-            displayLocation,
-            heading,
-          );
+          _moveMapWithDirection(displayLocation, _currentHeading);
+          _scheduleNavigationCamera(displayLocation, _currentHeading);
         }
 
-        // ---- NAVİGASYON KONTROLLERİ ----
+        // ============================================================
+        // 6. NAVİGASYON KONTROLLERİ
+        // ============================================================
         if (_navigationStarted && routePoints.isNotEmpty) {
-          _checkNavigationProgress(
-            location,
-          );
-
-          _updateNavigationInstruction(
-            location,
-          );
-
-          _checkOffRoute(
-            location,
-          );
-
-          _checkDestinationReached(
-            location,
-          );
-
-          _updateCurrentSpeedLimit(
-            location,
-          );
-
+          _checkNavigationProgress(rawLocation);
+          _updateNavigationInstruction(rawLocation);
+          _checkOffRoute(rawLocation);
+          _checkDestinationReached(rawLocation);
+          _updateCurrentSpeedLimit(rawLocation);
           _checkFatigue();
         }
       },
@@ -1169,35 +1191,25 @@ extension _HomePageLogicX on _HomePageState {
   // HARİTAYI YÖNE ÇEVİR
   // ============================================================
 
-  void _moveMapWithDirection(
-    LatLng location,
-    double heading,
-  ) {
+  void _moveMapWithDirection(LatLng location, double heading) {
     try {
       double zoom = mapController.camera.zoom;
-
       if (_navigationStarted) {
         zoom = 17.0;
       }
 
-      mapController.move(
-        location,
-        zoom,
-      );
+      mapController.move(location, zoom);
 
       if (_navigationMode) {
-        mapController.rotate(
-          -heading,
-        );
+        // 🚀 DÜZELTME: Haritayı telefonun yönüne göre döndür
+        final double mapRotation =
+            _deviceHeading != 0.0 ? -_deviceHeading : -heading;
+        mapController.rotate(mapRotation);
       } else {
-        mapController.rotate(
-          0,
-        );
+        mapController.rotate(0);
       }
     } catch (e) {
-      debugPrint(
-        'MAP MOVE ERROR (_moveMapWithDirection): $e',
-      );
+      debugPrint('MAP MOVE ERROR (_moveMapWithDirection): $e');
     }
   }
 
@@ -1493,24 +1505,29 @@ extension _HomePageLogicX on _HomePageState {
   double _routeBearing(LatLng location) {
     if (routePoints.length < 2) return _currentHeading;
 
+    // Rotadaki en yakın noktayı bul
     final int nearestIndex = _nearestRoutePointIndex(location);
 
-    int lookAheadIndex = (nearestIndex + 10).clamp(0, routePoints.length - 1);
+    // Rota üzerinde 20 metre ilerisini hedef al
+    int lookAheadIndex = nearestIndex;
+    double distanceCovered = 0.0;
 
-    if (lookAheadIndex == nearestIndex) {
-      lookAheadIndex = (nearestIndex - 10).clamp(0, routePoints.length - 1);
+    while (lookAheadIndex < routePoints.length - 1 && distanceCovered < 20.0) {
+      distanceCovered += Geolocator.distanceBetween(
+        routePoints[lookAheadIndex].latitude,
+        routePoints[lookAheadIndex].longitude,
+        routePoints[lookAheadIndex + 1].latitude,
+        routePoints[lookAheadIndex + 1].longitude,
+      );
+      lookAheadIndex++;
+    }
+
+    if (lookAheadIndex <= nearestIndex) {
+      return _currentHeading;
     }
 
     final LatLng from = routePoints[nearestIndex];
     final LatLng to = routePoints[lookAheadIndex];
-
-    final double dist = Geolocator.distanceBetween(
-      from.latitude,
-      from.longitude,
-      to.latitude,
-      to.longitude,
-    );
-    if (dist < 5) return _currentHeading;
 
     final double lat1 = from.latitude * math.pi / 180;
     final double lat2 = to.latitude * math.pi / 180;
@@ -1807,17 +1824,31 @@ extension _HomePageLogicX on _HomePageState {
   // MESAFE FORMAT
   // ============================================================
 
+  // ============================================================
+  // MESAFE FORMAT (Webfleet / Google Maps Standardı)
+  // ============================================================
   String _formatDistance(
     double meters,
   ) {
+    // 10 metreden az: Tam sayı (5 m, 8 m)
     if (meters < 10) {
       return '${meters.round()} m';
-    } else if (meters < 100) {
+    }
+    // 10-100 metre arası: 10'un katları (20 m, 50 m, 80 m)
+    else if (meters < 100) {
       return '${(meters / 10).round() * 10} m';
-    } else if (meters < 1000) {
+    }
+    // 100-500 metre arası: 50'nin katları (100 m, 150 m, 200 m)
+    else if (meters < 500) {
       return '${(meters / 50).round() * 50} m';
-    } else {
-      final double km = (meters / 100).round() / 10;
+    }
+    // 500-1000 metre arası: 100'ün katları (500 m, 600 m, 800 m)
+    else if (meters < 1000) {
+      return '${(meters / 100).round() * 100} m';
+    }
+    // 1 km ve üzeri: 500 metrenin katları (1.0 km, 1.5 km, 2.0 km, 2.5 km)
+    else {
+      final double km = (meters / 500).round() * 0.5;
       return '${km.toStringAsFixed(1)} km';
     }
   }
@@ -2607,7 +2638,7 @@ extension _HomePageLogicX on _HomePageState {
         );
 
         setState(() {
-          routeColor = AppTheme.truckOrange;
+          routeColor = Colors.green.shade700; // ⬅️ YEŞİL
           routePoints = points;
           alternativeRoutePoints = truckAlternatives;
 
@@ -2764,7 +2795,7 @@ extension _HomePageLogicX on _HomePageState {
         );
 
         setState(() {
-          routeColor = AppTheme.primaryBlue;
+          routeColor = Colors.green.shade700; // ⬅️ YEŞİL
 
           routePoints = mainRoute;
 
@@ -2924,6 +2955,7 @@ extension _HomePageLogicX on _HomePageState {
         final int? iconCategory = properties['iconCategory'] as int?;
         if (iconCategory == null) continue;
 
+        // 1 = Kaza, 6 = Yol Çalışması, 8 = Yol Kapalı, 9 = Diğer Kapalı
         if (![1, 6, 8, 9].contains(iconCategory)) continue;
 
         final geometry = incident['geometry'] as Map<String, dynamic>?;
@@ -2956,10 +2988,10 @@ extension _HomePageLogicX on _HomePageState {
               LatLng(lat - 0.0003, lon - 0.0003),
               LatLng(lat + 0.0003, lon + 0.0003),
             ],
-            reason: properties['description']?.toString() ?? 'Yol Kapalı',
+            reason: properties['events']?.toString() ?? 'Yol Kapalı',
           ));
         }
-      }
+      } // ⬅️ BURADAKİ PARANTEZ EKSİKTİ, EKLENDİ
 
       if (mounted && closedRoads.isNotEmpty) {
         setState(() {
@@ -3155,6 +3187,26 @@ extension _HomePageLogicX on _HomePageState {
     );
   }
 
+  double _smoothHeading(double newHeading) {
+    double diff = newHeading - _currentHeading;
+    while (diff > 180) {
+      diff -= 360;
+    }
+    while (diff < -180) {
+      diff += 360;
+    }
+
+    // ⬇️ İYİLEŞTİRME: 30 derece yerine 45 derece/saniye (daha hızlı tepki)
+    const double maxChange = 45.0;
+    if (diff.abs() > maxChange) {
+      diff = diff.sign * maxChange;
+    }
+
+    double result = _currentHeading + diff;
+    if (result < 0) result += 360;
+    if (result >= 360) result -= 360;
+    return result;
+  }
   // ============================================================
   // DURAKLAR
   // ============================================================

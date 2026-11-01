@@ -12,8 +12,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:sensors_plus/sensors_plus.dart'; // ⬅️ YENİ EKLENDİ
 
-import '../../services/route_service.dart'; // ⬅️ YENİ — TomTom + modeller
+import '../../services/route_service.dart';
 import '../../theme/app_theme.dart';
 import '../models/truck_profile.dart';
 import '../services/truck_profile_storage.dart';
@@ -193,9 +194,6 @@ class _NavigationInstruction {
   final double distance;
   final double duration;
   final LatLng? location;
-  // DÜZELTME (FIX): Manevra ikonu için modifier string'i
-  // saklıyoruz ("left", "right", "straight" ...). Bunu
-  // üst ve alt kartta kullanıyoruz.
   final String modifier;
 
   bool spokenFar = false;
@@ -214,12 +212,6 @@ class _NavigationInstruction {
 }
 
 class _HomePageState extends State<HomePage> {
-  // ============================================================
-  // ROUTE SERVICE
-  // ============================================================
-
-  //late RouteService _routeService;
-
   // ============================================================
   // TRUCK PROFILE
   // ============================================================
@@ -308,6 +300,14 @@ class _HomePageState extends State<HomePage> {
   bool _isFollowingLocation = false;
 
   // ============================================================
+  // JİROSKOP (TELEFON YÖNÜ) - YENİ
+  // ============================================================
+
+  StreamSubscription<GyroscopeEvent>? _gyroSubscription;
+  double _deviceHeading = 0.0;
+  double _currentSpeed = 0.0; // ⬅️ YENİ EKLE: Anlık hız (m/s)
+
+  // ============================================================
   // NAVİGASYON
   // ============================================================
 
@@ -365,11 +365,11 @@ class _HomePageState extends State<HomePage> {
   bool _isRecalculating = false;
 
   DateTime? _lastRecalculation;
-  DateTime? _lastOffRouteCheck; // ⬅️ YENİ
-  int _lastRouteIndex = 0; // ⬅️ YENİ
+  DateTime? _lastOffRouteCheck;
+  int _lastRouteIndex = 0;
 
-  // ⬇️ YENİ EKLE: Kapalı yollar listesi
   List<ClosedRoadSection> _closedRoadSections = [];
+
   // ============================================================
   // FAVORİLER
   // ============================================================
@@ -388,8 +388,6 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
 
-    //_routeService = RouteService();
-
     selectedVehicle = 'truck';
 
     _loadTruckProfile();
@@ -403,6 +401,21 @@ class _HomePageState extends State<HomePage> {
     _loadRouteHistory();
 
     _loadStops();
+
+    // ⬇️ YENİ EKLE: Jiroskop dinleyicisini başlat (Daha stabil)
+    _gyroSubscription = gyroscopeEventStream().listen((GyroscopeEvent event) {
+      // Jiroskopun z ekseni (telefonun etrafında dönme) verisini kullan
+      // Hassasiyet: 0.05 (daha küçük değer = daha yavaş, daha stabil dönüş)
+      final double deltaHeading = event.z * 0.05;
+
+      setState(() {
+        _deviceHeading += deltaHeading;
+
+        // Açıyı 0-360 arasında tut
+        if (_deviceHeading > 360) _deviceHeading -= 360;
+        if (_deviceHeading < 0) _deviceHeading += 360;
+      });
+    });
   }
 
   @override
@@ -412,6 +425,8 @@ class _HomePageState extends State<HomePage> {
     _debounce?.cancel();
 
     _positionSubscription?.cancel();
+
+    _gyroSubscription?.cancel(); // ⬅️ YENİ EKLE
 
     _speech.stop();
 
@@ -591,7 +606,6 @@ Future<Position> getUserLocation() async {
     );
   }
 
-  // 1. Önce son bilinen konumu dene (anında döner, GPS beklemez)
   try {
     final Position? lastKnown = await Geolocator.getLastKnownPosition();
     if (lastKnown != null) {
@@ -602,13 +616,10 @@ Future<Position> getUserLocation() async {
     debugPrint('SON BİLİNEN KONUM ALINAMADI: $e');
   }
 
-  // 2. Son bilinen konum yoksa, güncel konumu al
-  //    - timeLimit kaldırıldı (veya 60 saniyeye çıkarıldı)
-  //    - accuracy bestForNavigation yerine high yapıldı
   try {
     return await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high,
-      timeLimit: const Duration(seconds: 60), // ⬅️ 20 -> 60 saniye
+      timeLimit: const Duration(seconds: 60),
     );
   } catch (e) {
     debugPrint('GÜNCEL KONUM ALINAMADI: $e');

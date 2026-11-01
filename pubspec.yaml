@@ -13,6 +13,9 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Sensörler (Jiroskop, İvmeölçer vb. için)
+  sensors_plus: ^6.1.1
+
   # Depolama ve Preferences
   shared_preferences: ^2.5.5
   path_provider: ^2.1.0
@@ -50,9 +53,4 @@ flutter:
 
   assets:
     - assets/images/
-    # ⚠️ GÜVENLİK NOTU: .env dosyası asset olarak ekli çünkü flutter_dotenv
-    # çalışma zamanında dosyayı okumak zorunda. Bu, API anahtarının APK
-    # içinden çıkarılabileceği anlamına gelir.
-    # Geliştirme için sorun değil. Yayına çıkmadan önce --dart-define
-    # yöntemine geçmeni öneririm (bkz. lib/config/env.dart).
     - .env
