@@ -1836,8 +1836,9 @@ out center;''';
 
     return Positioned(
       top: 15 + topSafeArea,
-      left: isLandscape ? 100 : 15,
-      right: isLandscape ? 100 : 15,
+      left: 15,
+      right: isLandscape ? null : 15,
+      width: isLandscape ? 280 : null,
       child: Container(
         padding: const EdgeInsets.all(
           14,
@@ -1925,94 +1926,107 @@ out center;''';
       return const SizedBox.shrink();
     }
 
+    final bool isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
     return Positioned(
       left: 15,
-      right: 15,
+      right: isLandscape ? null : 15,
+      width: isLandscape ? 360 : null,
       bottom: 20,
       child: Container(
         padding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 14,
+          horizontal: 14,
+          vertical: 12,
         ),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(
-            16,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: const Color(0xFFE9EEF5),
           ),
           boxShadow: const [
             BoxShadow(
-              color: Colors.black26,
-              blurRadius: 10,
-              offset: Offset(
-                0,
-                4,
-              ),
+              color: Colors.black12,
+              blurRadius: 20,
+              offset: Offset(0, 6),
             ),
           ],
         ),
         child: Row(
           children: [
             Container(
-              width: 45,
-              height: 45,
+              width: 46,
+              height: 46,
               decoration: BoxDecoration(
                 color: routeColor,
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                // DÜZELTME (FIX): Alt kart için de aynı dinamik
-                // manevra ikonu kullanılıyor; sabit navigation
-                // ikonu yerine sağ/sol/düz oku.
                 _maneuverIcon(_currentModifier),
                 color: Colors.white,
+                size: 25,
               ),
             ),
-            const SizedBox(
-              width: 12,
-            ),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    _formatDistance(
-                      _remainingDistance,
-                    ),
+                    _formatDistance(_remainingDistance),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF17212B),
+                      fontWeight: FontWeight.w700,
                       fontSize: 17,
                     ),
                   ),
-                  const SizedBox(
-                    height: 3,
-                  ),
+                  const SizedBox(height: 3),
                   Text(
-                    _formatDuration(
-                      _remainingDuration,
-                    ),
+                    _formatDuration(_remainingDuration),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Colors.grey,
+                      color: Color(0xFF697586),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  if (_currentSpeedLimit > 0)
+                  if (_currentSpeedLimit > 0) ...[
+                    const SizedBox(height: 5),
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.speed, size: 14, color: Colors.red),
+                        const Icon(
+                          Icons.speed,
+                          size: 14,
+                          color: Colors.red,
+                        ),
                         const SizedBox(width: 4),
                         Text(
-                          '$_currentSpeedLimit km/s',
+                          '$_currentSpeedLimit km/h',
                           style: const TextStyle(
                             color: Colors.red,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
                           ),
                         ),
                       ],
                     ),
-                  if (_drivingStartTime != null)
+                  ],
+                  if (_drivingStartTime != null) ...[
+                    const SizedBox(height: 5),
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.timer, size: 14, color: Colors.orange),
+                        const Icon(
+                          Icons.timer_outlined,
+                          size: 14,
+                          color: Colors.orange,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           _formatDuration(
@@ -2029,71 +2043,68 @@ out center;''';
                                 ? Colors.red
                                 : Colors.orange,
                             fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
                     ),
-                  if (_routeRestrictionWarning.isNotEmpty)
+                  ],
+                  if (_routeRestrictionWarning.isNotEmpty) ...[
+                    const SizedBox(height: 6),
                     Container(
-                      margin: const EdgeInsets.only(top: 4),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.red.shade200),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.red.shade200,
+                        ),
                       ),
                       child: Text(
                         _routeRestrictionWarning,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: Colors.red.shade700,
                           fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w600,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  if (selectedVehicle == 'truck')
-                    Container(
-                      margin: const EdgeInsets.only(top: 4),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppTheme.truckOrange.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                            color: AppTheme.truckOrange.withValues(alpha: 0.3)),
-                      ),
-                    ),
+                  ],
                 ],
               ),
             ),
+            const SizedBox(width: 8),
             Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   selectedVehicle == 'truck'
                       ? Icons.local_shipping
                       : Icons.directions_car,
                   color: routeColor,
+                  size: 21,
                 ),
-                const SizedBox(
-                  height: 2,
-                ),
+                const SizedBox(height: 3),
                 Text(
                   selectedVehicle == 'truck' ? 'LKW' : 'Auto',
                   style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF455468),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
             ),
+            const SizedBox(width: 2),
             IconButton(
               tooltip: 'Navigasyonu kapat',
-              icon: const Icon(
-                Icons.close,
-              ),
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.close),
               onPressed: _stopNavigation,
             ),
           ],

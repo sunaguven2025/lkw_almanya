@@ -364,9 +364,9 @@ class _HomePageState extends State<HomePage> {
 
   bool _isRecalculating = false;
 
-  DateTime? _lastRecalculation;
   DateTime? _lastOffRouteCheck;
   int _lastRouteIndex = 0;
+  int _offRouteReadings = 0;
 
   List<ClosedRoadSection> _closedRoadSections = [];
 

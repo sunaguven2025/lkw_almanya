@@ -1144,24 +1144,16 @@ extension _HomePageLogicX on _HomePageState {
         // ============================================================
         // 3. SNAP TO ROAD (YOLA KİLİTLEME)
         // ============================================================
-        LatLng displayLocation = rawLocation;
-
-        if (_navigationStarted && routePoints.length >= 2) {
-          final int nearestIdx = _nearestRoutePointIndex(rawLocation);
-          final LatLng routePoint = routePoints[nearestIdx];
-          displayLocation = routePoint;
-        } else if (lastValidLocation != null) {
-          // GPS koptuysa, son geçerli konumu kullan
-          displayLocation = lastValidLocation!;
-        }
-
+        final LatLng displayLocation = rawLocation;
         // ============================================================
         // 4. STATE GÜNCELLE
         // ============================================================
         setState(() {
           userLocation = displayLocation;
           _currentHeading = _smoothHeading(newHeading);
-          _currentSpeed = position.speed; // ⬅️ YENİ EKLE
+          _currentSpeed = position.speed.isFinite && position.speed >= 0
+              ? position.speed
+              : 0.0;
         });
 
         // ============================================================
@@ -1201,9 +1193,7 @@ extension _HomePageLogicX on _HomePageState {
       mapController.move(location, zoom);
 
       if (_navigationMode) {
-        // 🚀 DÜZELTME: Haritayı telefonun yönüne göre döndür
-        final double mapRotation =
-            _deviceHeading != 0.0 ? -_deviceHeading : -heading;
+        final double mapRotation = -heading;
         mapController.rotate(mapRotation);
       } else {
         mapController.rotate(0);
@@ -1715,17 +1705,18 @@ extension _HomePageLogicX on _HomePageState {
 
     _lastRouteIndex = nearestIndex;
 
-    if (nearestDistance < 120) {
+    if (nearestDistance < 60) {
+      _offRouteReadings = 0;
       return;
     }
 
-    if (_lastRecalculation != null &&
-        now.difference(_lastRecalculation!) < const Duration(seconds: 20)) {
+    _offRouteReadings++;
+
+    if (_offRouteReadings < 2) {
       return;
     }
 
-    _lastRecalculation = now;
-
+    _offRouteReadings = 0;
     _recalculateRoute();
   }
 
