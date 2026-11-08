@@ -1069,7 +1069,7 @@ extension _HomePageLogicX on _HomePageState {
 
     const LocationSettings settings = LocationSettings(
       accuracy: LocationAccuracy.bestForNavigation,
-      distanceFilter: 5,
+      distanceFilter: 2,
     );
 
     // Yumuşatma için son geçerli konum ve zaman
@@ -1113,7 +1113,7 @@ extension _HomePageLogicX on _HomePageState {
           }
 
           // Yumuşatma (Smoothing)
-          const double smoothFactor = 0.3;
+          const double smoothFactor = 0.8;
           final double smoothedLat =
               lastValidLocation!.latitude * (1 - smoothFactor) +
                   rawLocation.latitude * smoothFactor;
@@ -1161,7 +1161,6 @@ extension _HomePageLogicX on _HomePageState {
         // ============================================================
         if (_isFollowingLocation) {
           _moveMapWithDirection(displayLocation, _currentHeading);
-          _scheduleNavigationCamera(displayLocation, _currentHeading);
         }
 
         // ============================================================
