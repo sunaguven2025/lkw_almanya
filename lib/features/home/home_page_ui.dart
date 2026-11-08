@@ -1827,35 +1827,28 @@ out center;''';
       return const SizedBox.shrink();
     }
 
-    // Navigasyon sırasında AppBar kaldırıldığı için (harita tam ekran),
-    // panel durum çubuğunun (saat/sinyal) arkasında kalmasın diye
-    // üst güvenli alan boşluğu manuel olarak ekleniyor.
     final double topSafeArea = MediaQuery.of(context).padding.top;
     final bool isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Positioned(
       top: 15 + topSafeArea,
-      left: 15,
-      right: isLandscape ? null : 15,
-      width: isLandscape ? 280 : null,
+      left: 16,
+      right: isLandscape ? null : 16,
+      width: isLandscape ? 420 : null,
       child: Container(
-        padding: const EdgeInsets.all(
-          14,
-        ),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(
-            18,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: const Color(0xFFE9EEF5),
           ),
           boxShadow: const [
             BoxShadow(
-              color: Colors.black26,
-              blurRadius: 10,
-              offset: Offset(
-                0,
-                4,
-              ),
+              color: Colors.black12,
+              blurRadius: 20,
+              offset: Offset(0, 6),
             ),
           ],
         ),
@@ -1874,9 +1867,7 @@ out center;''';
                 size: 32,
               ),
             ),
-            const SizedBox(
-              width: 12,
-            ),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1887,21 +1878,19 @@ out center;''';
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF17212B),
                     ),
                   ),
-                  const SizedBox(
-                    height: 5,
-                  ),
+                  const SizedBox(height: 5),
                   Text(
                     _currentInstructionDistance > 0
-                        ? _formatDistanceText
+                        ? '${_formatDistance(_currentInstructionDistance)} sonra'
                         : 'Rotayı takip edin',
                     style: TextStyle(
                       fontSize: 14,
                       color: routeColor,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
@@ -1911,10 +1900,6 @@ out center;''';
         ),
       ),
     );
-  }
-
-  String get _formatDistanceText {
-    return '${_formatDistance(_currentInstructionDistance)} sonra';
   }
 
   // ============================================================
@@ -1930,15 +1915,12 @@ out center;''';
         MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Positioned(
-      left: 15,
-      right: isLandscape ? null : 15,
+      left: 16,
+      right: isLandscape ? null : 16,
       width: isLandscape ? 360 : null,
-      bottom: 20,
+      bottom: 16,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 12,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
@@ -1980,7 +1962,7 @@ out center;''';
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Color(0xFF17212B),
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w800,
                       fontSize: 17,
                     ),
                   ),
@@ -1992,7 +1974,7 @@ out center;''';
                     style: const TextStyle(
                       color: Color(0xFF697586),
                       fontSize: 13,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   if (_currentSpeedLimit > 0) ...[
@@ -2000,11 +1982,7 @@ out center;''';
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          Icons.speed,
-                          size: 14,
-                          color: Colors.red,
-                        ),
+                        const Icon(Icons.speed, size: 14, color: Colors.red),
                         const SizedBox(width: 4),
                         Text(
                           '$_currentSpeedLimit km/h',
@@ -2012,38 +1990,6 @@ out center;''';
                             color: Colors.red,
                             fontWeight: FontWeight.w700,
                             fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  if (_drivingStartTime != null) ...[
-                    const SizedBox(height: 5),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.timer_outlined,
-                          size: 14,
-                          color: Colors.orange,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _formatDuration(
-                            DateTime.now()
-                                .difference(_drivingStartTime!)
-                                .inSeconds
-                                .toDouble(),
-                          ),
-                          style: TextStyle(
-                            color: DateTime.now()
-                                        .difference(_drivingStartTime!)
-                                        .inMinutes >=
-                                    270
-                                ? Colors.red
-                                : Colors.orange,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -2100,7 +2046,6 @@ out center;''';
                 ),
               ],
             ),
-            const SizedBox(width: 2),
             IconButton(
               tooltip: 'Navigasyonu kapat',
               visualDensity: VisualDensity.compact,
@@ -2410,7 +2355,7 @@ out center;''';
                       ),
                     ),
                     const Text(
-                      'km/s',
+                      'km/h',
                       style: TextStyle(
                         fontSize: 10,
                         color: Colors.grey,
