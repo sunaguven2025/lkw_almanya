@@ -1822,6 +1822,9 @@ out center;''';
     return '';
   }
 
+  // ============================================================
+  // NAVİGASYON ALT BİLGİ
+  // ============================================================
   Widget _buildNavigationTopPanel() {
     if (!_navigationStarted || routePoints.isEmpty) {
       return const SizedBox.shrink();
@@ -1832,22 +1835,22 @@ out center;''';
         MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Positioned(
-      top: 15 + topSafeArea,
-      left: 16,
-      right: isLandscape ? null : 16,
-      width: isLandscape ? 420 : null,
+      top: 12 + topSafeArea,
+      left: 14,
+      right: isLandscape ? null : 14,
+      width: isLandscape ? 360 : null,
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: const Color(0xFFE9EEF5),
+            color: const Color(0xFFE7ECF2),
           ),
           boxShadow: const [
             BoxShadow(
-              color: Colors.black12,
-              blurRadius: 20,
+              color: Color(0x26000000),
+              blurRadius: 18,
               offset: Offset(0, 6),
             ),
           ],
@@ -1855,41 +1858,50 @@ out center;''';
         child: Row(
           children: [
             Container(
-              width: 58,
-              height: 58,
+              width: 54,
+              height: 54,
               decoration: BoxDecoration(
                 color: routeColor,
                 shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: routeColor.withValues(alpha: 0.25),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: Icon(
                 _maneuverIcon(_currentModifier),
                 color: Colors.white,
-                size: 32,
+                size: 29,
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     _currentInstructionText,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
                       color: Color(0xFF17212B),
+                      fontSize: 17,
+                      height: 1.15,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  const SizedBox(height: 5),
+                  const SizedBox(height: 6),
                   Text(
                     _currentInstructionDistance > 0
                         ? '${_formatDistance(_currentInstructionDistance)} sonra'
                         : 'Rotayı takip edin',
                     style: TextStyle(
-                      fontSize: 14,
                       color: routeColor,
+                      fontSize: 13,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -1901,10 +1913,6 @@ out center;''';
       ),
     );
   }
-
-  // ============================================================
-  // NAVİGASYON ALT BİLGİ
-  // ============================================================
 
   Widget _buildNavigationInfo() {
     if (!_navigationStarted || routePoints.isEmpty) {
@@ -2332,14 +2340,21 @@ out center;''';
           if (_navigationStarted)
             Container(
               margin: const EdgeInsets.only(bottom: 10),
-              width: 65,
-              height: 65,
+              width: 68,
+              height: 68,
               decoration: BoxDecoration(
                 color: Colors.white,
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.green, width: 3),
+                border: Border.all(
+                  color: const Color(0xFF3B9B62),
+                  width: 3,
+                ),
                 boxShadow: const [
-                  BoxShadow(color: Colors.black26, blurRadius: 6),
+                  BoxShadow(
+                    color: Color(0x26000000),
+                    blurRadius: 12,
+                    offset: Offset(0, 4),
+                  ),
                 ],
               ),
               child: Center(
@@ -2349,16 +2364,20 @@ out center;''';
                     Text(
                       (_currentSpeed * 3.6).toStringAsFixed(0),
                       style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green,
+                        color: Color(0xFF267A49),
+                        fontSize: 21,
+                        height: 1,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
+                    const SizedBox(height: 3),
                     const Text(
                       'km/h',
                       style: TextStyle(
+                        color: Color(0xFF697586),
                         fontSize: 10,
-                        color: Colors.grey,
+                        height: 1,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
