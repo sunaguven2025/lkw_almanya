@@ -587,7 +587,8 @@ Future<Position> getUserLocation() async {
 
   if (!serviceEnabled) {
     throw Exception(
-        'Konum servisi kapalı. Lütfen telefon ayarlarından konumu açın.');
+      'Konum servisi kapalı. Lütfen telefon ayarlarından konumu açın.',
+    );
   }
 
   LocationPermission permission = await Geolocator.checkPermission();
@@ -606,23 +607,8 @@ Future<Position> getUserLocation() async {
     );
   }
 
-  try {
-    final Position? lastKnown = await Geolocator.getLastKnownPosition();
-    if (lastKnown != null) {
-      debugPrint('SON BİLİNEN KONUM KULLANILDI: $lastKnown');
-      return lastKnown;
-    }
-  } catch (e) {
-    debugPrint('SON BİLİNEN KONUM ALINAMADI: $e');
-  }
-
-  try {
-    return await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-      timeLimit: const Duration(seconds: 60),
-    );
-  } catch (e) {
-    debugPrint('GÜNCEL KONUM ALINAMADI: $e');
-    rethrow;
-  }
+  return Geolocator.getCurrentPosition(
+    desiredAccuracy: LocationAccuracy.bestForNavigation,
+    timeLimit: const Duration(seconds: 20),
+  );
 }

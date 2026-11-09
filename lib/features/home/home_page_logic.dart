@@ -1069,10 +1069,9 @@ extension _HomePageLogicX on _HomePageState {
 
     const LocationSettings settings = LocationSettings(
       accuracy: LocationAccuracy.bestForNavigation,
-      distanceFilter: 2,
+      distanceFilter: 1,
     );
 
-    // Yumuşatma için son geçerli konum ve zaman
     LatLng? lastValidLocation;
     DateTime? lastValidTime;
     double lastValidHeading = _currentHeading;
@@ -1083,43 +1082,38 @@ extension _HomePageLogicX on _HomePageState {
       (Position position) {
         if (!mounted) return;
 
-        // DÜZELTME: 'final' kaldırıldı, çünkü aşağıda değer atıyoruz
         LatLng rawLocation = LatLng(
           position.latitude,
           position.longitude,
         );
 
-        // ============================================================
-        // 1. GPS ZIPLAMA FİLTRESİ (Exponential Smoothing)
-        // ============================================================
         if (lastValidLocation != null && lastValidTime != null) {
           final double distMoved = Geolocator.distanceBetween(
             lastValidLocation!.latitude,
-            lastValidLocation!.longitude, // ⬅️ ! EKLENDİ
+            lastValidLocation!.longitude,
             rawLocation.latitude,
             rawLocation.longitude,
           );
-          final double timeDiffSec = DateTime.now()
-                  .difference(lastValidTime!) // ⬅️ Null check eklendi
-                  .inMilliseconds /
-              1000.0;
 
-          // Eğer 1 saniyede 50 metreden fazla (180 km/s) yol aldıysa GPS hatasıdır.
-          // Bu sinyali yoksay, son geçerli konumu kullan.
+          final double timeDiffSec =
+              DateTime.now().difference(lastValidTime!).inMilliseconds / 1000.0;
+
           if (timeDiffSec > 0 && distMoved / timeDiffSec > 50) {
             debugPrint(
-                '🚫 GPS HATASI: Ani zıplama (${distMoved.toStringAsFixed(0)} m / ${timeDiffSec.toStringAsFixed(1)} s)');
+              '🚫 GPS HATASI: Ani zıplama (${distMoved.toStringAsFixed(0)} m / ${timeDiffSec.toStringAsFixed(1)} s)',
+            );
             return;
           }
 
-          // Yumuşatma (Smoothing)
-          const double smoothFactor = 0.8;
+          const double smoothFactor = 0.15;
+
           final double smoothedLat =
               lastValidLocation!.latitude * (1 - smoothFactor) +
                   rawLocation.latitude * smoothFactor;
-          final double smoothedLng = lastValidLocation!.longitude *
-                  (1 - smoothFactor) + // ⬅️ ! EKLENDİ
-              rawLocation.longitude * smoothFactor;
+
+          final double smoothedLng =
+              lastValidLocation!.longitude * (1 - smoothFactor) +
+                  rawLocation.longitude * smoothFactor;
 
           rawLocation = LatLng(smoothedLat, smoothedLng);
         }
@@ -1127,9 +1121,6 @@ extension _HomePageLogicX on _HomePageState {
         lastValidLocation = rawLocation;
         lastValidTime = DateTime.now();
 
-        // ============================================================
-        // 2. YÖN (HEADING) HESAPLAMA
-        // ============================================================
         double newHeading = lastValidHeading;
 
         if (_navigationStarted && routePoints.length >= 2) {
@@ -1139,15 +1130,11 @@ extension _HomePageLogicX on _HomePageState {
             position.speed > 5.0) {
           newHeading = position.heading;
         }
+
         lastValidHeading = newHeading;
 
-        // ============================================================
-        // 3. SNAP TO ROAD (YOLA KİLİTLEME)
-        // ============================================================
         final LatLng displayLocation = rawLocation;
-        // ============================================================
-        // 4. STATE GÜNCELLE
-        // ============================================================
+
         setState(() {
           userLocation = displayLocation;
           _currentHeading = _smoothHeading(newHeading);
@@ -1156,16 +1143,10 @@ extension _HomePageLogicX on _HomePageState {
               : 0.0;
         });
 
-        // ============================================================
-        // 5. HARİTAYI HAREKET ETTİR
-        // ============================================================
         if (_isFollowingLocation) {
           _moveMapWithDirection(displayLocation, _currentHeading);
         }
 
-        // ============================================================
-        // 6. NAVİGASYON KONTROLLERİ
-        // ============================================================
         if (_navigationStarted && routePoints.isNotEmpty) {
           _checkNavigationProgress(rawLocation);
           _updateNavigationInstruction(rawLocation);

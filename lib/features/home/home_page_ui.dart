@@ -2336,8 +2336,7 @@ out center;''';
 
           const SizedBox(height: 4),
 
-          // ⬇️ YENİ EKLE: HIZ GÖSTERGESİ (Sağ alt, yuvarlak)
-          if (_navigationStarted)
+          if (_navigationStarted || userLocation != null)
             Container(
               margin: const EdgeInsets.only(bottom: 10),
               width: 68,
@@ -2383,7 +2382,7 @@ out center;''';
                   ],
                 ),
               ),
-            ),
+            ), // ⬇️ YENİ EKLE: HIZ GÖSTERGESİ (Sağ alt, yuvarlak)
 
           // KONUMUM (ana buton)
           FloatingActionButton(
