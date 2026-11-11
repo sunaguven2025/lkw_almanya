@@ -2519,8 +2519,10 @@ out center;''';
                 polylines: [
                   Polyline(
                     points: routePoints,
-                    strokeWidth: 5.0,
+                    strokeWidth: 8.0,
                     color: routeColor,
+                    borderColor: Colors.white,
+                    borderStrokeWidth: 2.5,
                   ),
                 ],
               ),
@@ -2682,9 +2684,8 @@ out center;''';
                     width: 55,
                     height: 55,
                     child: Transform.rotate(
-                      angle: _navigationMode
-                          ? -_currentHeading * math.pi / 180
-                          : 0,
+                      angle:
+                          _navigationMode ? 0 : _currentHeading * math.pi / 180,
                       child: Container(
                         decoration: const BoxDecoration(
                           color: Colors.white,

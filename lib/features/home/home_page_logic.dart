@@ -1099,23 +1099,8 @@ extension _HomePageLogicX on _HomePageState {
               DateTime.now().difference(lastValidTime!).inMilliseconds / 1000.0;
 
           if (timeDiffSec > 0 && distMoved / timeDiffSec > 50) {
-            debugPrint(
-              '🚫 GPS HATASI: Ani zıplama (${distMoved.toStringAsFixed(0)} m / ${timeDiffSec.toStringAsFixed(1)} s)',
-            );
             return;
           }
-
-          const double smoothFactor = 0.15;
-
-          final double smoothedLat =
-              lastValidLocation!.latitude * (1 - smoothFactor) +
-                  rawLocation.latitude * smoothFactor;
-
-          final double smoothedLng =
-              lastValidLocation!.longitude * (1 - smoothFactor) +
-                  rawLocation.longitude * smoothFactor;
-
-          rawLocation = LatLng(smoothedLat, smoothedLng);
         }
 
         lastValidLocation = rawLocation;
@@ -1135,25 +1120,22 @@ extension _HomePageLogicX on _HomePageState {
 
         final LatLng displayLocation = rawLocation;
 
+        double speedMps = position.speed.isFinite && position.speed >= 0
+            ? position.speed
+            : 0.0;
+
+        if (speedMps < 0.5) {
+          speedMps = 0.0;
+        }
+
         setState(() {
           userLocation = displayLocation;
           _currentHeading = _smoothHeading(newHeading);
-          _currentSpeed = position.speed.isFinite && position.speed >= 0
-              ? position.speed
-              : 0.0;
+          _currentSpeed = speedMps;
         });
 
         if (_isFollowingLocation) {
           _moveMapWithDirection(displayLocation, _currentHeading);
-        }
-
-        if (_navigationStarted && routePoints.isNotEmpty) {
-          _checkNavigationProgress(rawLocation);
-          _updateNavigationInstruction(rawLocation);
-          _checkOffRoute(rawLocation);
-          _checkDestinationReached(rawLocation);
-          _updateCurrentSpeedLimit(rawLocation);
-          _checkFatigue();
         }
       },
     );
@@ -1166,7 +1148,7 @@ extension _HomePageLogicX on _HomePageState {
   void _moveMapWithDirection(LatLng location, double heading) {
     try {
       double zoom = mapController.camera.zoom;
-      if (_navigationStarted) {
+      if (_navigationStarted || userLocation != null) {
         zoom = 17.0;
       }
 
