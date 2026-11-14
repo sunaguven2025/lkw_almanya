@@ -1074,7 +1074,6 @@ extension _HomePageLogicX on _HomePageState {
 
     LatLng? lastValidLocation;
     DateTime? lastValidTime;
-    double lastValidHeading = _currentHeading;
 
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: settings,
@@ -1106,17 +1105,9 @@ extension _HomePageLogicX on _HomePageState {
         lastValidLocation = rawLocation;
         lastValidTime = DateTime.now();
 
-        double newHeading = lastValidHeading;
-
-        if (_navigationStarted && routePoints.length >= 2) {
-          newHeading = _routeBearing(rawLocation);
-        } else if (position.heading >= 0 &&
-            position.heading.isFinite &&
-            position.speed > 5.0) {
-          newHeading = position.heading;
-        }
-
-        lastValidHeading = newHeading;
+        // Telefon pusulası geçersiz bir değer üretirse son geçerli yönü koru.
+        double newHeading =
+            _deviceHeading.isFinite ? _deviceHeading : _currentHeading;
 
         final LatLng displayLocation = rawLocation;
 
@@ -1128,11 +1119,32 @@ extension _HomePageLogicX on _HomePageState {
           speedMps = 0.0;
         }
 
+        // Navigasyon sırasında araç hareket ediyorsa telefon pusulası
+        // yerine rotanın ilerideki yönünü kullan.
+        if (_navigationStarted && routePoints.length >= 2 && speedMps >= 1.5) {
+          newHeading = _routeBearing(displayLocation);
+        }
+
         setState(() {
           userLocation = displayLocation;
           _currentHeading = _smoothHeading(newHeading);
           _currentSpeed = speedMps;
         });
+
+        // Hız sınırını ve sürüş süresini GPS akışına bağla.
+        // UI metotları ayrı bir extension'da olduğu için açıkça çağrılır.
+        _HomePageUIX(this)._updateCurrentSpeedLimit(displayLocation);
+        _HomePageUIX(this)._checkFatigue();
+
+        // Her GPS güncellemesinde talimatları ve kalan mesafeyi yenile.
+        if (_navigationStarted) {
+          _updateNavigationInstruction(displayLocation);
+          _checkDestinationReached(displayLocation);
+
+          if (_navigationStarted) {
+            _checkOffRoute(displayLocation);
+          }
+        }
 
         if (_isFollowingLocation) {
           _moveMapWithDirection(displayLocation, _currentHeading);
@@ -1147,21 +1159,17 @@ extension _HomePageLogicX on _HomePageState {
 
   void _moveMapWithDirection(LatLng location, double heading) {
     try {
-      double zoom = mapController.camera.zoom;
-      if (_navigationStarted || userLocation != null) {
-        zoom = 17.0;
-      }
+      final double zoom = _navigationStarted ? 17.0 : mapController.camera.zoom;
 
       mapController.move(location, zoom);
 
-      if (_navigationMode) {
-        final double mapRotation = -heading;
-        mapController.rotate(mapRotation);
+      if (_navigationMode && heading.isFinite) {
+        mapController.rotate(-heading);
       } else {
         mapController.rotate(0);
       }
     } catch (e) {
-      debugPrint('MAP MOVE ERROR (_moveMapWithDirection): $e');
+      debugPrint('MAP MOVE ERROR: $e');
     }
   }
 
@@ -1251,60 +1259,6 @@ extension _HomePageLogicX on _HomePageState {
     mapController.rotate(0);
 
     WakelockPlus.disable();
-  }
-
-  // ============================================================
-  // NAVİGASYON İLERLEMESİ
-  // ============================================================
-
-  void _checkNavigationProgress(
-    LatLng currentLocation,
-  ) {
-    if (routePoints.isEmpty) {
-      return;
-    }
-
-    double nearestDistance = double.infinity;
-
-    int nearestIndex = 0;
-
-    for (int i = 0; i < routePoints.length; i++) {
-      final double distance = Geolocator.distanceBetween(
-        currentLocation.latitude,
-        currentLocation.longitude,
-        routePoints[i].latitude,
-        routePoints[i].longitude,
-      );
-
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearestIndex = i;
-      }
-    }
-
-    if (nearestIndex <= _lastSpokenRouteIndex) {
-      return;
-    }
-
-    if (nearestDistance > 80) {
-      return;
-    }
-
-    final DateTime now = DateTime.now();
-
-    if (_lastNavigationSpeech != null &&
-        now.difference(
-              _lastNavigationSpeech!,
-            ) <
-            const Duration(
-              seconds: 8,
-            )) {
-      return;
-    }
-
-    _lastSpokenRouteIndex = nearestIndex;
-
-    _lastNavigationSpeech = now;
   }
 
   // ============================================================
@@ -1495,6 +1449,28 @@ extension _HomePageLogicX on _HomePageState {
   }
 
   // ============================================================
+  // NAVİGASYON ANONSUNU TEKRAR ETME KONTROLÜ
+  // ============================================================
+
+  Future<void> _speakNavigationText(String text) async {
+    final int instructionIndex = _currentInstructionIndex;
+    final DateTime now = DateTime.now();
+    final DateTime? lastSpeech = _lastNavigationSpeech;
+
+    // Aynı talimat 3 saniye içinde tekrar seslendirilmesin.
+    if (_lastSpokenRouteIndex == instructionIndex &&
+        lastSpeech != null &&
+        now.difference(lastSpeech).inSeconds < 3) {
+      return;
+    }
+
+    _lastSpokenRouteIndex = instructionIndex;
+    _lastNavigationSpeech = now;
+
+    await _speak(text);
+  }
+
+  // ============================================================
   // DÖNÜŞ TALİMATINI SESLENDİR
   // ============================================================
 
@@ -1534,7 +1510,7 @@ extension _HomePageLogicX on _HomePageState {
       }
 
       if (speakText != null) {
-        await _speak(speakText);
+        await _speakNavigationText(speakText);
       }
 
       return;
@@ -1566,7 +1542,7 @@ extension _HomePageLogicX on _HomePageState {
     }
 
     if (speakText != null) {
-      await _speak(speakText);
+      await _speakNavigationText(speakText);
     }
   }
 

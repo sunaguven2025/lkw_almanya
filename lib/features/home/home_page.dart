@@ -12,7 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:sensors_plus/sensors_plus.dart'; // ⬅️ YENİ EKLENDİ
+import 'package:sensors_plus/sensors_plus.dart';
 
 import '../../services/route_service.dart';
 import '../../theme/app_theme.dart';
@@ -300,12 +300,14 @@ class _HomePageState extends State<HomePage> {
   bool _isFollowingLocation = false;
 
   // ============================================================
-  // JİROSKOP (TELEFON YÖNÜ) - YENİ
+  // PUSULA
   // ============================================================
 
-  StreamSubscription<GyroscopeEvent>? _gyroSubscription;
+  StreamSubscription<MagnetometerEvent>? _compassSubscription;
+
   double _deviceHeading = 0.0;
-  double _currentSpeed = 0.0; // ⬅️ YENİ EKLE: Anlık hız (m/s)
+
+  double _currentSpeed = 0.0;
 
   // ============================================================
   // NAVİGASYON
@@ -391,31 +393,30 @@ class _HomePageState extends State<HomePage> {
     selectedVehicle = 'truck';
 
     _loadTruckProfile();
-
     loadLocation();
-
     _initializeVoice();
-
     _loadFavorites();
-
     _loadRouteHistory();
-
     _loadStops();
 
-    // ⬇️ YENİ EKLE: Jiroskop dinleyicisini başlat (Daha stabil)
-    _gyroSubscription = gyroscopeEventStream().listen((GyroscopeEvent event) {
-      // Jiroskopun z ekseni (telefonun etrafında dönme) verisini kullan
-      // Hassasiyet: 0.05 (daha küçük değer = daha yavaş, daha stabil dönüş)
-      final double deltaHeading = event.z * 0.05;
+    // Pusula sensörünü başlat
+    _compassSubscription = magnetometerEventStream().listen(
+      (MagnetometerEvent event) {
+        if (!mounted) return;
 
-      setState(() {
-        _deviceHeading += deltaHeading;
+        double heading = math.atan2(event.y, event.x) * 180 / math.pi;
 
-        // Açıyı 0-360 arasında tut
-        if (_deviceHeading > 360) _deviceHeading -= 360;
-        if (_deviceHeading < 0) _deviceHeading += 360;
-      });
-    });
+        heading = (heading + 360) % 360;
+
+        setState(() {
+          _deviceHeading = heading;
+          _currentHeading = heading;
+        });
+      },
+      onError: (error) {
+        debugPrint('PUSULA HATASI: $error');
+      },
+    );
   }
 
   @override
@@ -426,7 +427,7 @@ class _HomePageState extends State<HomePage> {
 
     _positionSubscription?.cancel();
 
-    _gyroSubscription?.cancel(); // ⬅️ YENİ EKLE
+    _compassSubscription?.cancel();
 
     _speech.stop();
 
@@ -442,9 +443,7 @@ class _HomePageState extends State<HomePage> {
   // ============================================================
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: _navigationStarted
           ? null
