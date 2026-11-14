@@ -12,7 +12,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:sensors_plus/sensors_plus.dart';
 
 import '../../services/route_service.dart';
 import '../../theme/app_theme.dart';
@@ -300,12 +299,10 @@ class _HomePageState extends State<HomePage> {
   bool _isFollowingLocation = false;
 
   // ============================================================
-  // PUSULA
+  // HIZ
   // ============================================================
-
-  StreamSubscription<MagnetometerEvent>? _compassSubscription;
-
-  double _deviceHeading = 0.0;
+  // NOT: Pusula (manyetometre) kaldırıldı. Yön artık GPS yönü / rota yönü
+  // ile hesaplanıyor (bkz. home_page_logic.dart -> _startPositionTracking).
 
   double _currentSpeed = 0.0;
 
@@ -331,7 +328,7 @@ class _HomePageState extends State<HomePage> {
   String _routeRestrictionWarning = '';
 
   // ============================================================
-  // KAMYON TONAJ SINIFI
+  // DURAKLAR, GEÇMİŞ, HIZ LİMİTİ, SÜRÜŞ SÜRESİ, ROTA DURUMU
   // ============================================================
 
   List<_RouteStop> _stops = <_RouteStop>[];
@@ -398,25 +395,6 @@ class _HomePageState extends State<HomePage> {
     _loadFavorites();
     _loadRouteHistory();
     _loadStops();
-
-    // Pusula sensörünü başlat
-    _compassSubscription = magnetometerEventStream().listen(
-      (MagnetometerEvent event) {
-        if (!mounted) return;
-
-        double heading = math.atan2(event.y, event.x) * 180 / math.pi;
-
-        heading = (heading + 360) % 360;
-
-        setState(() {
-          _deviceHeading = heading;
-          _currentHeading = heading;
-        });
-      },
-      onError: (error) {
-        debugPrint('PUSULA HATASI: $error');
-      },
-    );
   }
 
   @override
@@ -426,8 +404,6 @@ class _HomePageState extends State<HomePage> {
     _debounce?.cancel();
 
     _positionSubscription?.cancel();
-
-    _compassSubscription?.cancel();
 
     _speech.stop();
 
@@ -497,8 +473,36 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
       body: userLocation == null
-          ? const Center(
-              child: CircularProgressIndicator(),
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Konum alınıyor...',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Uzun sürerse konum iznini ve GPS\'i kontrol edin.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: loadLocation,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Tekrar dene'),
+                    ),
+                  ],
+                ),
+              ),
             )
           : Stack(
               children: [
