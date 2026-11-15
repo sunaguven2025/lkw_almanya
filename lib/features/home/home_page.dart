@@ -524,6 +524,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                 _buildNavigationInfo(),
+                _buildSpeedPanel(), // ← YENİ
                 _buildMapControls(),
               ],
             ),

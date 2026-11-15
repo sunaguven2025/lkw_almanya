@@ -2162,6 +2162,123 @@ out center;''';
     );
   }
 
+  Widget _buildSpeedPanel() {
+    if (userLocation == null) {
+      return const SizedBox.shrink();
+    }
+
+    final int speedKmh = (_currentSpeed * 3.6).round();
+    final int limit = _currentSpeedLimit;
+    final bool hasLimit = limit > 0;
+    final bool exceeded = hasLimit && speedKmh > limit;
+
+    Widget card({
+      required String label,
+      required String value,
+      required Color background,
+      required Color textColor,
+    }) {
+      return Container(
+        width: 100,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x33000000),
+              blurRadius: 10,
+              offset: Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              maxLines: 1,
+              style: TextStyle(
+                color: textColor.withValues(alpha: 0.7),
+                fontSize: 9,
+                letterSpacing: 0.4,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 30,
+                height: 1,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              'km/h',
+              style: TextStyle(
+                color: textColor.withValues(alpha: 0.75),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Positioned(
+      left: 16,
+      bottom: _navigationStarted ? 130 : 20,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              card(
+                label: 'ANLIK HIZ',
+                value: '$speedKmh',
+                background: exceeded
+                    ? const Color(0xFFB3261E)
+                    : const Color(0xFF1A2B3C),
+                textColor: Colors.white,
+              ),
+              const SizedBox(width: 8),
+              card(
+                label: 'YOL HIZ SINIRI',
+                value: hasLimit ? '$limit' : '–',
+                background: const Color(0xFFF1F1F1),
+                textColor: const Color(0xFF17212B),
+              ),
+            ],
+          ),
+          if (exceeded) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF3A1412),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'Hız sınırı aşıldı',
+                style: TextStyle(
+                  color: Color(0xFFFF6B63),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildMapControls() {
     return Positioned(
       right: 15,
@@ -2335,54 +2452,6 @@ out center;''';
           ),
 
           const SizedBox(height: 4),
-
-          if (_navigationStarted || userLocation != null)
-            Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              width: 68,
-              height: 68,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: const Color(0xFF3B9B62),
-                  width: 3,
-                ),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x26000000),
-                    blurRadius: 12,
-                    offset: Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      (_currentSpeed * 3.6).toStringAsFixed(0),
-                      style: const TextStyle(
-                        color: Color(0xFF267A49),
-                        fontSize: 21,
-                        height: 1,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    const Text(
-                      'km/h',
-                      style: TextStyle(
-                        color: Color(0xFF697586),
-                        fontSize: 10,
-                        height: 1,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ), // ⬇️ YENİ EKLE: HIZ GÖSTERGESİ (Sağ alt, yuvarlak)
 
           // KONUMUM (ana buton)
           FloatingActionButton(
