@@ -2683,6 +2683,7 @@ out center;''';
                     point: userLocation!,
                     width: 55,
                     height: 55,
+                    rotate: true,
                     child: Transform.rotate(
                       angle:
                           _navigationMode ? 0 : _currentHeading * math.pi / 180,

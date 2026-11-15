@@ -93,6 +93,9 @@ DateTime? _stationarySince;
 DateTime? _lastDrivingPersist;
 bool _drivingBlockRestored = false;
 
+/// Konum akışı şu an ön plan servisiyle (Android bildirimli) mi çalışıyor?
+bool _trackingInBackgroundMode = false;
+
 class _RouteMatch {
   final int index; // rota parçasının başlangıç noktası indeksi
   final double distance; // rota çizgisine uzaklık (m)
@@ -1443,18 +1446,44 @@ extension _HomePageLogicX on _HomePageState {
   // KONUM TAKİBİ
   // ============================================================
 
+  /// Navigasyon sırasında Android'de ÖN PLAN SERVİSİ (kalıcı bildirim) ile
+  /// çalışır; uygulama arka plana atılınca veya ekran sönünce konum ve
+  /// sesli yönlendirme kesilmez. Navigasyon yokken normal akış kullanılır
+  /// (kalıcı bildirim yok). Ekranın açık kalması için hâlâ uygulamanın
+  /// ÖNDE olması gerekir; arka planda ekran söner ama navigasyon sürer.
+  LocationSettings _buildLocationSettings() {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 1,
+        intervalDuration: const Duration(seconds: 1),
+        foregroundNotificationConfig: _navigationStarted
+            ? const ForegroundNotificationConfig(
+                notificationTitle: 'LKW Almanya Navigasyon',
+                notificationText: 'Navigasyon çalışıyor',
+                enableWakeLock: true,
+              )
+            : null,
+      );
+    }
+
+    return const LocationSettings(
+      accuracy: LocationAccuracy.bestForNavigation,
+      distanceFilter: 1,
+    );
+  }
+
   void _startPositionTracking() {
     _positionSubscription?.cancel();
+
+    _trackingInBackgroundMode = _navigationStarted;
 
     if (!_drivingBlockRestored) {
       _drivingBlockRestored = true;
       unawaited(_restoreDrivingBlock());
     }
 
-    const LocationSettings settings = LocationSettings(
-      accuracy: LocationAccuracy.bestForNavigation,
-      distanceFilter: 1,
-    );
+    final LocationSettings settings = _buildLocationSettings();
 
     LatLng? lastValidLocation;
     DateTime? lastValidTime;
@@ -1464,6 +1493,14 @@ extension _HomePageLogicX on _HomePageState {
     ).listen(
       (Position position) {
         if (!mounted) return;
+
+        // Navigasyon başladı/bitti: konum akışını doğru moda al
+        // (ön plan servisi yalnızca navigasyon sırasında çalışır).
+        if (_navigationStarted != _trackingInBackgroundMode) {
+          Future<void>.microtask(() {
+            _startPositionTracking();
+          });
+        }
 
         // Çok hatalı okumaları at (ilk konum hariç).
         if (userLocation != null &&
@@ -1708,6 +1745,11 @@ extension _HomePageLogicX on _HomePageState {
     mapController.rotate(0);
 
     WakelockPlus.disable();
+
+    // Ön plan servisini (kalıcı bildirim) hemen kapat.
+    if (_trackingInBackgroundMode) {
+      _startPositionTracking();
+    }
   }
 
   // ============================================================
@@ -3170,6 +3212,11 @@ extension _HomePageLogicX on _HomePageState {
         // TomTom Traffic'ten kapalı yolları çek
         _fetchTomTomTrafficIncidents(points);
 
+        // Arka planda da çalışsın: ön plan servisini başlat.
+        if (!_trackingInBackgroundMode) {
+          _startPositionTracking();
+        }
+
         if (userLocation != null) {
           _isFollowingLocation = true;
           _moveMapWithDirection(
@@ -3348,6 +3395,10 @@ extension _HomePageLogicX on _HomePageState {
         });
 
         _fetchTomTomTrafficIncidents(mainRoute);
+
+        if (!_trackingInBackgroundMode) {
+          _startPositionTracking();
+        }
 
         if (userLocation != null) {
           _isFollowingLocation = true;
