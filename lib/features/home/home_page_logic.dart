@@ -72,6 +72,14 @@ const String _kDrivingLastSeenKey = 'lkw_driving_last_seen';
 const Duration _kRequiredBreak = Duration(minutes: 45);
 const double _kMovingSpeedMps = 0.5;
 
+/// TEST A/B: false yaparsan navigasyon başlayınca konum akışı YENİDEN KURULMAZ
+/// ve ön plan servisi kullanılmaz. 15-20 sn donma bu yeniden kurulumdan mı
+/// geliyor diye denemek için. (Arka plan çalışması bu durumda kapalı kalır.)
+const bool kUseForegroundService = true;
+
+/// TEST: haritada canlı hata ayıklama kutusu. Yayından önce false yap.
+const bool kShowDebugOverlay = true;
+
 /// Dönüş talimatı anonsundan sonra düşük öncelikli anonslar bu süre bekler.
 const Duration _kUrgentSpeechWindow = Duration(seconds: 8);
 
@@ -95,6 +103,32 @@ bool _drivingBlockRestored = false;
 
 /// Konum akışı şu an ön plan servisiyle (Android bildirimli) mi çalışıyor?
 bool _trackingInBackgroundMode = false;
+
+/// Araç simgesi şu an rota çizgisine oturtulmuş mu? (histerezis için)
+bool _displaySnapped = false;
+
+/// Son yeniden hesaplamanın yapıldığı konum (park/depoda döngüyü önler).
+LatLng? _lastRecalculationPosition;
+
+/// Ardışık konumlardan türetilen hız (m/s), yumuşatılmış. Bazı cihazlarda
+/// position.speed sürekli 0 geliyor; o zaman bunu kullanırız.
+double _derivedSpeedEma = 0.0;
+
+// --- Hata ayıklama kutusu için ölçümler ---
+double _dbgGpsSpeedMps = 0.0;
+double _dbgAccuracy = 0.0;
+double _dbgMatchDistance = -1.0;
+double _dbgThreshold = 0.0;
+DateTime? _dbgLastFixAt;
+double _dbgLastGapSec = 0.0;
+double _dbgMaxGapSec = 0.0;
+int _dbgFixCount = 0;
+int _dbgLagMs = 0;
+int _dbgMaxLagMs = 0;
+int _dbgRestartCount = 0;
+int _dbgTick = 0;
+Timer? _dbgTimer;
+DateTime? _dbgTimerLast;
 
 class _RouteMatch {
   final int index; // rota parçasının başlangıç noktası indeksi
@@ -1353,6 +1387,79 @@ extension _HomePageLogicX on _HomePageState {
   // AB 561/2006: 4,5 saat sürüşten sonra 45 dk mola. Burada sadece bir
   // UYARI sayacı var; yasal kayıt TAKOGRAFTIR, bu uygulama değil.
 
+  // ============================================================
+  // HATA AYIKLAMA KUTUSU (kShowDebugOverlay)
+  // ============================================================
+  // Kırmızı yazı = son fix 5 sn'den eski (GPS akışı kesilmiş / donma).
+  // Dokununca max değerler sıfırlanır.
+
+  Widget _buildDebugOverlay() {
+    if (!kShowDebugOverlay || userLocation == null) {
+      return const SizedBox.shrink();
+    }
+
+    final DateTime now = DateTime.now();
+
+    final double age = _dbgLastFixAt == null
+        ? -1.0
+        : now.difference(_dbgLastFixAt!).inMilliseconds / 1000.0;
+
+    final String matchText =
+        _dbgMatchDistance < 0 ? '-' : _dbgMatchDistance.toStringAsFixed(0);
+
+    final String lastRecalcText = _lastRecalculationAt == null
+        ? '-'
+        : '${now.difference(_lastRecalculationAt!).inSeconds} sn once';
+
+    final List<String> lines = <String>[
+      'HIZ gps ${(_dbgGpsSpeedMps * 3.6).toStringAsFixed(0)}'
+          ' | turet ${(_derivedSpeedEma * 3.6).toStringAsFixed(0)}'
+          ' | kullan ${(_currentSpeed * 3.6).toStringAsFixed(0)} km/h',
+      'FIX yas ${age.toStringAsFixed(1)} sn'
+          ' | aralik ${_dbgLastGapSec.toStringAsFixed(1)}'
+          ' (max ${_dbgMaxGapSec.toStringAsFixed(1)})',
+      'dogruluk ${_dbgAccuracy.toStringAsFixed(0)} m | fix #$_dbgFixCount',
+      'ROTA uzaklik $matchText m | esik ${_dbgThreshold.toStringAsFixed(0)}'
+          ' | sapma $_offRouteReadings/2 | snap ${_displaySnapped ? 'E' : 'H'}',
+      'YENI ROTA ${_isRecalculating ? 'HESAPLANIYOR' : 'yok'}'
+          ' | son $lastRecalcText',
+      'UI gecikme $_dbgLagMs ms (max $_dbgMaxLagMs)',
+      'AKIS kurulum $_dbgRestartCount | on plan ${_trackingInBackgroundMode ? 'E' : 'H'}'
+          ' | nav ${_navigationStarted ? 'E' : 'H'}',
+    ];
+
+    final double topSafe = MediaQuery.of(context).padding.top;
+
+    return Positioned(
+      top: topSafe + 150,
+      left: 8,
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _dbgMaxGapSec = 0.0;
+            _dbgMaxLagMs = 0;
+          });
+        },
+        child: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: const Color(0xCC000000),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            lines.join('\n'),
+            style: TextStyle(
+              color: (age > 5.0) ? Colors.redAccent : Colors.greenAccent,
+              fontSize: 10,
+              height: 1.25,
+              fontFamily: 'monospace',
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _restoreDrivingBlock() async {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -1457,13 +1564,14 @@ extension _HomePageLogicX on _HomePageState {
         accuracy: LocationAccuracy.bestForNavigation,
         distanceFilter: 1,
         intervalDuration: const Duration(seconds: 1),
-        foregroundNotificationConfig: _navigationStarted
-            ? const ForegroundNotificationConfig(
-                notificationTitle: 'LKW Almanya Navigasyon',
-                notificationText: 'Navigasyon çalışıyor',
-                enableWakeLock: true,
-              )
-            : null,
+        foregroundNotificationConfig:
+            _navigationStarted && kUseForegroundService
+                ? const ForegroundNotificationConfig(
+                    notificationTitle: 'LKW Almanya Navigasyon',
+                    notificationText: 'Navigasyon çalışıyor',
+                    enableWakeLock: true,
+                  )
+                : null,
       );
     }
 
@@ -1477,6 +1585,39 @@ extension _HomePageLogicX on _HomePageState {
     _positionSubscription?.cancel();
 
     _trackingInBackgroundMode = _navigationStarted;
+
+    _dbgRestartCount++;
+    debugPrint('TRACKING (re)start #$_dbgRestartCount nav=$_navigationStarted');
+
+    if (kShowDebugOverlay && _dbgTimer == null) {
+      _dbgTimerLast = DateTime.now();
+
+      // 200 ms'lik sayaç: gecikme = ana iş parçacığı ne kadar kilitlendi.
+      _dbgTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
+        if (!mounted) {
+          _dbgTimer?.cancel();
+          _dbgTimer = null;
+          return;
+        }
+
+        final DateTime now = DateTime.now();
+        final int lag = now.difference(_dbgTimerLast!).inMilliseconds - 200;
+        _dbgTimerLast = now;
+
+        _dbgLagMs = lag < 0 ? 0 : lag;
+
+        if (_dbgLagMs > _dbgMaxLagMs) {
+          _dbgMaxLagMs = _dbgLagMs;
+        }
+
+        _dbgTick++;
+
+        // Fix gelmese bile "yaş" sayacı ilerlesin diye periyodik yeniden çiz.
+        if (_dbgTick % 3 == 0) {
+          setState(() {});
+        }
+      });
+    }
 
     if (!_drivingBlockRestored) {
       _drivingBlockRestored = true;
@@ -1496,11 +1637,29 @@ extension _HomePageLogicX on _HomePageState {
 
         // Navigasyon başladı/bitti: konum akışını doğru moda al
         // (ön plan servisi yalnızca navigasyon sırasında çalışır).
-        if (_navigationStarted != _trackingInBackgroundMode) {
+        if (kUseForegroundService &&
+            _navigationStarted != _trackingInBackgroundMode) {
           Future<void>.microtask(() {
             _startPositionTracking();
           });
         }
+
+        // Hata ayıklama ölçümleri: fix'ler arası süre, hız, doğruluk.
+        final DateTime dbgNow = DateTime.now();
+
+        if (_dbgLastFixAt != null) {
+          _dbgLastGapSec =
+              dbgNow.difference(_dbgLastFixAt!).inMilliseconds / 1000.0;
+
+          if (_dbgLastGapSec > _dbgMaxGapSec) {
+            _dbgMaxGapSec = _dbgLastGapSec;
+          }
+        }
+
+        _dbgLastFixAt = dbgNow;
+        _dbgFixCount++;
+        _dbgGpsSpeedMps = position.speed.isFinite ? position.speed : 0.0;
+        _dbgAccuracy = position.accuracy.isFinite ? position.accuracy : 0.0;
 
         // Çok hatalı okumaları at (ilk konum hariç).
         if (userLocation != null &&
@@ -1513,6 +1672,8 @@ extension _HomePageLogicX on _HomePageState {
           position.latitude,
           position.longitude,
         );
+
+        double derivedSpeed = 0.0;
 
         if (lastValidLocation != null && lastValidTime != null) {
           final double distMoved = Geolocator.distanceBetween(
@@ -1528,10 +1689,17 @@ extension _HomePageLogicX on _HomePageState {
           if (timeDiffSec > 0 && distMoved / timeDiffSec > 50) {
             return;
           }
+
+          if (timeDiffSec >= 0.5 && timeDiffSec <= 10.0) {
+            derivedSpeed = distMoved / timeDiffSec;
+          }
         }
 
         lastValidLocation = rawLocation;
         lastValidTime = DateTime.now();
+
+        // Konumlardan türetilen hız (yumuşatılmış).
+        _derivedSpeedEma = _derivedSpeedEma * 0.5 + derivedSpeed * 0.5;
 
         double speedMps = position.speed.isFinite && position.speed >= 0
             ? position.speed
@@ -1540,6 +1708,23 @@ extension _HomePageLogicX on _HomePageState {
         if (speedMps < 0.5) {
           speedMps = 0.0;
         }
+
+        // Bazı cihazlarda position.speed sürekli 0 geliyor (ekran görüntülerinde
+        // sürüş sırasında bile 0 km/h). O zaman konumlardan türetilen hızı
+        // kullan. Eşik 2,5 m/s ve doğruluk <=25 m: dururken GPS titremesi
+        // hareket sanılmasın.
+        if (speedMps == 0.0 &&
+            _derivedSpeedEma >= 2.5 &&
+            (position.accuracy <= 0 || position.accuracy <= 25)) {
+          speedMps = _derivedSpeedEma;
+        }
+
+        debugPrint(
+          'SPEED gps=${(position.speed * 3.6).toStringAsFixed(1)} '
+          'derived=${(_derivedSpeedEma * 3.6).toStringAsFixed(1)} '
+          'used=${(speedMps * 3.6).toStringAsFixed(1)} km/h '
+          'acc=${position.accuracy.toStringAsFixed(0)} m',
+        );
 
         _trackDrivingBlock(speedMps);
 
@@ -1550,6 +1735,8 @@ extension _HomePageLogicX on _HomePageState {
         // Rota eşleştirmesi (tek sefer, tüm navigasyon adımları paylaşır).
         final _RouteMatch? match =
             navigating ? _matchOnRoute(rawLocation) : null;
+
+        _dbgMatchDistance = match?.distance ?? -1.0;
 
         // ---- YÖN ----
         // Hareket hâlinde: rotadaysak rota yönü, değilsek GPS yönü.
@@ -1565,11 +1752,17 @@ extension _HomePageLogicX on _HomePageState {
         }
 
         // ---- GÖRÜNTÜLENEN KONUM (map matching) ----
-        // Hareket hâlinde ve rotaya <=30 m ise oku rota üzerine oturt.
+        // Rotaya yakınsak araç simgesini rota çizgisi üzerine oturt.
+        // Histerezis: oturmuşken 60 m'ye kadar, değilken 35 m. Hız şartı YOK:
+        // dururken de simge çizgiden kaymasın (eskiden sadece >=1,5 m/s idi).
         LatLng displayLocation = rawLocation;
 
-        if (match != null && speedMps >= 1.5 && match.distance <= 30.0) {
+        if (match != null &&
+            match.distance <= (_displaySnapped ? 60.0 : 35.0)) {
           displayLocation = match.snapped;
+          _displaySnapped = true;
+        } else {
+          _displaySnapped = false;
         }
 
         userLocation = displayLocation;
@@ -1595,7 +1788,6 @@ extension _HomePageLogicX on _HomePageState {
             _checkOffRoute(
               rawLocation,
               accuracy: position.accuracy,
-              speedMps: speedMps,
               match: match,
             );
           }
@@ -1747,7 +1939,7 @@ extension _HomePageLogicX on _HomePageState {
     WakelockPlus.disable();
 
     // Ön plan servisini (kalıcı bildirim) hemen kapat.
-    if (_trackingInBackgroundMode) {
+    if (kUseForegroundService && _trackingInBackgroundMode) {
       _startPositionTracking();
     }
   }
@@ -1828,6 +2020,10 @@ extension _HomePageLogicX on _HomePageState {
           if (best < 1.0) {
             break;
           }
+        } else if (best < 900.0 && i - bestIdx > 200) {
+          // 30 m içinde bir aday bulduk ve 200 nokta ilerledik, daha iyisi
+          // gelmiyor: rotanın geri kalanını taramaya gerek yok.
+          break;
         }
       }
 
@@ -1921,7 +2117,10 @@ extension _HomePageLogicX on _HomePageState {
     }
 
     // Rotada olduğumuzdan emin değilsek talimat/anons üretme.
+    // Eski bilgiyi ("50 m sonra", "88 km") göstermeye devam etme.
     if (m.distance > _kLostTrackMeters) {
+      _currentInstructionText = 'Rotadan çıktınız';
+      _currentInstructionDistance = 0;
       return;
     }
 
@@ -2201,7 +2400,6 @@ extension _HomePageLogicX on _HomePageState {
   void _checkOffRoute(
     LatLng currentLocation, {
     double accuracy = 0.0,
-    double speedMps = 0.0,
     _RouteMatch? match,
   }) {
     if (_isRecalculating || routePoints.length < 2 || destination == null) {
@@ -2217,12 +2415,6 @@ extension _HomePageLogicX on _HomePageState {
 
     _lastOffRouteCheck = now;
 
-    // Yavaşken (park, depo) yeniden hesaplama tetikleme.
-    if (speedMps < 2.0) {
-      _offRouteReadings = 0;
-      return;
-    }
-
     final _RouteMatch m = match ?? _matchOnRoute(currentLocation);
 
     // GPS hatası büyükse eşiği büyüt (en fazla 150 m).
@@ -2232,6 +2424,14 @@ extension _HomePageLogicX on _HomePageState {
         _kOffRouteThresholdMeters,
         (accuracy.isFinite ? accuracy : 0.0) * 1.5,
       ),
+    );
+
+    _dbgThreshold = threshold;
+
+    debugPrint(
+      'OFFROUTE dist=${m.distance.toStringAsFixed(0)} m '
+      'threshold=${threshold.toStringAsFixed(0)} m '
+      'readings=$_offRouteReadings',
     );
 
     if (m.distance < threshold) {
@@ -2253,6 +2453,29 @@ extension _HomePageLogicX on _HomePageState {
       return;
     }
 
+    // Park/depo: son yeniden hesaplamadan beri en az 60 m ilerlemediysek
+    // tekrar hesaplama (rota başlangıcı yola oturduğundan araç çizgiden
+    // uzak kalabilir). Eskiden burada HIZ şartı vardı; position.speed
+    // sürekli 0 geldiğinde yeniden hesaplama hiç tetiklenmiyordu.
+    final LatLng? lastPos = _lastRecalculationPosition;
+
+    if (lastPos != null &&
+        Geolocator.distanceBetween(
+              lastPos.latitude,
+              lastPos.longitude,
+              currentLocation.latitude,
+              currentLocation.longitude,
+            ) <
+            60.0) {
+      return;
+    }
+
+    _lastRecalculationPosition = currentLocation;
+
+    // Yeni rota ham GPS konumundan başlasın (ekrandaki konum rotaya
+    // oturtulmuş olabilir; o eski rotanın üstüdür).
+    userLocation = currentLocation;
+
     _recalculateRoute();
   }
 
@@ -2273,6 +2496,13 @@ extension _HomePageLogicX on _HomePageState {
 
     if (mounted) {
       setState(() {});
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Rotadan çıktınız, yeni rota hesaplanıyor...'),
+          duration: Duration(seconds: 3),
+        ),
+      );
     }
 
     await _speak(
@@ -3213,7 +3443,7 @@ extension _HomePageLogicX on _HomePageState {
         _fetchTomTomTrafficIncidents(points);
 
         // Arka planda da çalışsın: ön plan servisini başlat.
-        if (!_trackingInBackgroundMode) {
+        if (kUseForegroundService && !_trackingInBackgroundMode) {
           _startPositionTracking();
         }
 
@@ -3396,7 +3626,7 @@ extension _HomePageLogicX on _HomePageState {
 
         _fetchTomTomTrafficIncidents(mainRoute);
 
-        if (!_trackingInBackgroundMode) {
+        if (kUseForegroundService && !_trackingInBackgroundMode) {
           _startPositionTracking();
         }
 
@@ -3525,6 +3755,29 @@ extension _HomePageLogicX on _HomePageState {
 
       const Set<int> shownCategories = <int>{1, 8, 9};
 
+      // PERFORMANS: 100 bin noktalı rotada her olay için tam tarama ana iş
+      // parçacığını saniyelerce kilitliyordu (debug modda 10-20 sn). Rotayı
+      // ~60 m aralıklı noktalara seyreltiyoruz (150 m eşik için yeterli).
+      final List<LatLng> coarse = <LatLng>[route.first];
+      LatLng kept = route.first;
+      final double coarseKx =
+          _kMetersPerDegLonEq * math.cos(route.first.latitude * math.pi / 180);
+
+      for (int i = 1; i < route.length; i++) {
+        final LatLng p = route[i];
+        final double dx = (p.longitude - kept.longitude) * coarseKx;
+        final double dy = (p.latitude - kept.latitude) * _kMetersPerDegLat;
+
+        if (dx * dx + dy * dy >= 3600.0) {
+          coarse.add(p);
+          kept = p;
+        }
+      }
+
+      if (coarse.last != route.last) {
+        coarse.add(route.last);
+      }
+
       final List<ClosedRoadSection> closedRoads = [];
 
       for (final incident in incidents) {
@@ -3578,7 +3831,7 @@ extension _HomePageLogicX on _HomePageState {
         bool nearRoute = false;
 
         for (final LatLng s in samples) {
-          if (_distanceToRouteMeters(s, route, stopBelow: 150.0) <= 150.0) {
+          if (_distanceToRouteMeters(s, coarse, stopBelow: 150.0) <= 150.0) {
             nearRoute = true;
             break;
           }
@@ -3589,6 +3842,7 @@ extension _HomePageLogicX on _HomePageState {
         closedRoads.add(ClosedRoadSection(
           points: points,
           reason: _incidentReason(properties, iconCategory),
+          category: iconCategory,
         ));
       }
 

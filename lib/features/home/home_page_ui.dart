@@ -2167,6 +2167,11 @@ out center;''';
       return const SizedBox.shrink();
     }
 
+    const double cardWidth = 76;
+    const double valueSize = 24;
+    const double labelSize = 8;
+    const double unitSize = 10;
+
     final int speedKmh = (_currentSpeed * 3.6).round();
     final int limit = _currentSpeedLimit;
     final bool hasLimit = limit > 0;
@@ -2179,48 +2184,51 @@ out center;''';
       required Color textColor,
     }) {
       return Container(
-        width: 100,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+        width: cardWidth,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
         decoration: BoxDecoration(
           color: background,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           boxShadow: const [
             BoxShadow(
               color: Color(0x33000000),
-              blurRadius: 10,
-              offset: Offset(0, 3),
+              blurRadius: 8,
+              offset: Offset(0, 2),
             ),
           ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              label,
-              maxLines: 1,
-              style: TextStyle(
-                color: textColor.withValues(alpha: 0.7),
-                fontSize: 9,
-                letterSpacing: 0.4,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: TextStyle(
-                color: textColor,
-                fontSize: 30,
-                height: 1,
-                fontWeight: FontWeight.w800,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                softWrap: false,
+                style: TextStyle(
+                  color: textColor.withValues(alpha: 0.7),
+                  fontSize: labelSize,
+                  letterSpacing: 0.3,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
             const SizedBox(height: 3),
             Text(
+              value,
+              style: TextStyle(
+                color: textColor,
+                fontSize: valueSize,
+                height: 1,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
               'km/h',
               style: TextStyle(
                 color: textColor.withValues(alpha: 0.75),
-                fontSize: 11,
+                fontSize: unitSize,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -2230,8 +2238,8 @@ out center;''';
     }
 
     return Positioned(
-      left: 16,
-      bottom: _navigationStarted ? 130 : 20,
+      left: 12,
+      bottom: _navigationStarted ? 112 : 16,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2247,7 +2255,7 @@ out center;''';
                     : const Color(0xFF1A2B3C),
                 textColor: Colors.white,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               card(
                 label: 'YOL HIZ SINIRI',
                 value: hasLimit ? '$limit' : '–',
@@ -2257,18 +2265,18 @@ out center;''';
             ],
           ),
           if (exceeded) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: const Color(0xFF3A1412),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: const Text(
                 'Hız sınırı aşıldı',
                 style: TextStyle(
                   color: Color(0xFFFF6B63),
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -2596,21 +2604,10 @@ out center;''';
                 ],
               ),
 
-            // KAPALI YOLLAR (Sonra çizilsin, üstte görünsün)
+            // KAPALI YOLLAR / YOL ÇALIŞMALARI (kesik çizgili)
             if (_closedRoadSections.isNotEmpty)
               PolylineLayer(
-                polylines: _closedRoadSections
-                    .map(
-                      (ClosedRoadSection section) => Polyline(
-                        points: section.points,
-                        strokeWidth: 9.0, // ⬅️ Daha kalın
-                        color: Colors.red
-                            .withValues(alpha: 1.0), // ⬅️ Tam opak kırmızı
-                        borderColor: Colors.white,
-                        borderStrokeWidth: 2.5, // ⬅️ Daha belirgin beyaz kenar
-                      ),
-                    )
-                    .toList(),
+                polylines: closedRoadDashes(_closedRoadSections),
               ),
 
             // MARKERLAR
@@ -2750,29 +2747,13 @@ out center;''';
                 if (userLocation != null)
                   Marker(
                     point: userLocation!,
-                    width: 55,
-                    height: 55,
+                    width: 34,
+                    height: 56,
                     rotate: true,
                     child: Transform.rotate(
                       angle:
                           _navigationMode ? 0 : _currentHeading * math.pi / 180,
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black26,
-                              blurRadius: 5,
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.navigation,
-                          color: AppTheme.primaryBlue,
-                          size: 34,
-                        ),
-                      ),
+                      child: VehicleMarker(isTruck: selectedVehicle == 'truck'),
                     ),
                   ),
                 if (destination != null)

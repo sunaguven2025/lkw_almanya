@@ -20,6 +20,8 @@ import '../models/truck_profile.dart';
 import '../services/truck_profile_storage.dart';
 import '../widgets/truck_profile_sheet.dart';
 import '../../services/tomtom_route_service.dart';
+import '../widgets/vehicle_marker.dart';
+import '../widgets/dashed_polyline.dart';
 
 part 'home_page_logic.dart';
 part 'home_page_ui.dart';
