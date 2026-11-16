@@ -104,6 +104,9 @@ bool _drivingBlockRestored = false;
 /// Konum akışı şu an ön plan servisiyle (Android bildirimli) mi çalışıyor?
 bool _trackingInBackgroundMode = false;
 
+// ⬇️ YENİ: yeniden başlatma fırtınasını engeller (Paket 1.1)
+bool _restartingTracking = false;
+
 /// Araç simgesi şu an rota çizgisine oturtulmuş mu? (histerezis için)
 bool _displaySnapped = false;
 
@@ -1581,8 +1584,8 @@ extension _HomePageLogicX on _HomePageState {
     );
   }
 
-  void _startPositionTracking() {
-    _positionSubscription?.cancel();
+  Future<void> _startPositionTracking() async {
+    await _positionSubscription?.cancel();
 
     _trackingInBackgroundMode = _navigationStarted;
 
@@ -1637,10 +1640,17 @@ extension _HomePageLogicX on _HomePageState {
 
         // Navigasyon başladı/bitti: konum akışını doğru moda al
         // (ön plan servisi yalnızca navigasyon sırasında çalışır).
+        // KİLİT: aynı anda birden fazla yeniden başlatma tetiklenmesin.
         if (kUseForegroundService &&
-            _navigationStarted != _trackingInBackgroundMode) {
-          Future<void>.microtask(() {
-            _startPositionTracking();
+            _navigationStarted != _trackingInBackgroundMode &&
+            !_restartingTracking) {
+          _restartingTracking = true;
+          Future<void>.microtask(() async {
+            try {
+              await _startPositionTracking();
+            } finally {
+              _restartingTracking = false;
+            }
           });
         }
 
@@ -3923,6 +3933,7 @@ extension _HomePageLogicX on _HomePageState {
       distance: distance,
       duration: duration,
     );
+    if (!mounted) return;
     setState(() {
       _routeHistory.insert(0, item);
       if (_routeHistory.length > 20) {
@@ -3938,107 +3949,115 @@ extension _HomePageLogicX on _HomePageState {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (BuildContext ctx) {
-        return SafeArea(
-          child: SizedBox(
-            height: MediaQuery.of(context).size.height * 0.72,
-            child: Column(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.history, color: AppTheme.primaryBlue),
-                      SizedBox(width: 10),
-                      Text(
-                        'Rota Geçmişi',
-                        style: TextStyle(
-                            fontSize: 21, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(),
-                Expanded(
-                  child: _routeHistory.isEmpty
-                      ? const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(30),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.history,
-                                    size: 70, color: Colors.grey),
-                                SizedBox(height: 15),
-                                Text(
-                                  'Henüz rota geçmişi yok.',
-                                  style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
+        return StatefulBuilder(
+          builder: (BuildContext ctx, StateSetter setSheetState) {
+            return SafeArea(
+              child: SizedBox(
+                height: MediaQuery.of(context).size.height * 0.72,
+                child: Column(
+                  children: [
+                    const Padding(
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      child: Row(
+                        children: [
+                          Icon(Icons.history, color: AppTheme.primaryBlue),
+                          SizedBox(width: 10),
+                          Text(
+                            'Rota Geçmişi',
+                            style: TextStyle(
+                                fontSize: 21, fontWeight: FontWeight.bold),
                           ),
-                        )
-                      : ListView.separated(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          itemCount: _routeHistory.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (BuildContext ctx, int index) {
-                            final item = _routeHistory[index];
-                            return ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: item.vehicle == 'truck'
-                                    ? AppTheme.truckOrange
-                                    : AppTheme.primaryBlue,
-                                child: Icon(
-                                  item.vehicle == 'truck'
-                                      ? Icons.local_shipping
-                                      : Icons.directions_car,
-                                  color: Colors.white,
+                        ],
+                      ),
+                    ),
+                    const Divider(),
+                    Expanded(
+                      child: _routeHistory.isEmpty
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(30),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.history,
+                                        size: 70, color: Colors.grey),
+                                    SizedBox(height: 15),
+                                    Text(
+                                      'Henüz rota geçmişi yok.',
+                                      style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              title: Text(
-                                item.destinationName,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold),
-                              ),
-                              subtitle: Text(
-                                '${_formatDistance(item.distance)} · ${_formatDuration(item.duration)} · '
-                                '${item.timestamp.day}.${item.timestamp.month}.${item.timestamp.year}',
-                              ),
-                              trailing: IconButton(
-                                icon:
-                                    const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () async {
-                                  setState(() => _routeHistory.removeAt(index));
-                                  await _saveRouteHistory();
-                                  if (!mounted) return;
-                                  Navigator.of(context).pop();
-                                  _showRouteHistory();
-                                },
-                              ),
-                              onTap: () {
-                                final dest = item.destination;
-                                final name = item.destinationName;
-                                final id = item.id;
-                                Navigator.of(context).pop();
-                                if (!mounted) return;
-                                _selectFavorite(_FavoritePlace(
-                                  id: id,
-                                  name: name,
-                                  latitude: dest.latitude,
-                                  longitude: dest.longitude,
-                                  address: name,
-                                ));
+                            )
+                          : ListView.separated(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              itemCount: _routeHistory.length,
+                              separatorBuilder: (_, __) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (BuildContext ctx, int index) {
+                                final item = _routeHistory[index];
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: item.vehicle == 'truck'
+                                        ? AppTheme.truckOrange
+                                        : AppTheme.primaryBlue,
+                                    child: Icon(
+                                      item.vehicle == 'truck'
+                                          ? Icons.local_shipping
+                                          : Icons.directions_car,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  title: Text(
+                                    item.destinationName,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold),
+                                  ),
+                                  subtitle: Text(
+                                    '${_formatDistance(item.distance)} · ${_formatDuration(item.duration)} · '
+                                    '${item.timestamp.day}.${item.timestamp.month}.${item.timestamp.year}',
+                                  ),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.delete,
+                                        color: Colors.red),
+                                    onPressed: () async {
+                                      // Sheet içinde listeyi güncelle
+                                      setSheetState(() {
+                                        _routeHistory.removeAt(index);
+                                      });
+                                      // Parent'ı da bilgilendir
+                                      if (mounted) setState(() {});
+                                      await _saveRouteHistory();
+                                    },
+                                  ),
+                                  onTap: () {
+                                    final dest = item.destination;
+                                    final name = item.destinationName;
+                                    final id = item.id;
+                                    Navigator.of(context).pop();
+                                    if (!mounted) return;
+                                    _selectFavorite(_FavoritePlace(
+                                      id: id,
+                                      name: name,
+                                      latitude: dest.latitude,
+                                      longitude: dest.longitude,
+                                      address: name,
+                                    ));
+                                  },
+                                );
                               },
-                            );
-                          },
-                        ),
+                            ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
@@ -4053,8 +4072,13 @@ extension _HomePageLogicX on _HomePageState {
       diff += 360;
     }
 
-    // ⬇️ İYİLEŞTİRME: 30 derece yerine 45 derece/saniye (daha hızlı tepki)
-    const double maxChange = 45.0;
+    // dt'ye göre ölçekleme: GPS fix aralığı 1 sn ise 45°/sn, 2 sn ise
+    // aynı hız için 90°'ye kadar izin verilir. Aksi hâlde seyrek fix'lerde
+    // dönüş yapay olarak yavaşlar.
+    final double dtSec =
+        _dbgLastGapSec > 0.2 ? _dbgLastGapSec.clamp(0.5, 2.0) : 1.0;
+    final double maxChange = 45.0 * dtSec;
+
     if (diff.abs() > maxChange) {
       diff = diff.sign * maxChange;
     }

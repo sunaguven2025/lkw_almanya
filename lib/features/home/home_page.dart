@@ -528,6 +528,7 @@ class _HomePageState extends State<HomePage> {
                 _buildNavigationInfo(),
                 _buildSpeedPanel(), // ← YENİ
                 _buildMapControls(),
+                _buildDebugOverlay(), // ⬅️ BURAYA EKLE (en sona)
               ],
             ),
     );

@@ -16,13 +16,18 @@ import 'package:latlong2/latlong.dart';
 import 'tomtom_route_service.dart';
 
 // ============================================================
-// KAPALI YOL BÖLÜMÜ MODELİ (YENİ)
+// KAPALI YOL BÖLÜMÜ MODELİ
 // ============================================================
 class ClosedRoadSection {
   final List<LatLng> points;
   final String reason;
+  final int? category; // ⬅️ EKLE (1=Kaza, 8=Yol kapalı, 9=Çalışma)
 
-  ClosedRoadSection({required this.points, required this.reason});
+  ClosedRoadSection({
+    required this.points,
+    required this.reason,
+    this.category, // ⬅️ EKLE (opsiyonel)
+  });
 }
 
 // ============================================================
