@@ -9,12 +9,31 @@ import '../../services/route_service.dart';
 /// flutter_map sürümünden bağımsızdır (çizgiyi kendisi parçalara böler).
 /// Konum: lib/features/widgets/dashed_polyline.dart
 
-const Color kClosedRoadColor = Color(0xFFE53935);
-const double kClosedRoadStrokeWidth = 12.0;
-const double kClosedRoadBorderWidth = 2.5;
+// ============================================================
+// KAPALI YOL RENK VE KALINLIK SABİTLERİ
+// ============================================================
 
-const double _dashMeters = 14.0;
-const double _gapMeters = 10.0;
+const Color kClosedRoadColor =
+    Color(0xFFF57C00); // Turuncu (Material Orange 700)
+const double kClosedRoadStrokeWidth = 4.5;
+const double kClosedRoadBorderWidth = 0.0;
+
+const double _dashMeters = 12.0;
+const double _gapMeters = 8.0;
+
+// ============================================================
+// TREN YOLU DESENİ (Google Maps tarzı) İÇİN EK SABİTLER
+// ============================================================
+// Alt katman: turuncu sürekli çizgi (gövde)
+// Üst katman: beyaz kesikli çizgi (travers)
+
+const Color kClosedRoadDashedColor = Color(0xFFFFFFFF); // Beyaz
+const double kClosedRoadBaseWidth = 5.0; // Alt katman kalınlığı
+const double kClosedRoadDashWidth = 2.5; // Üst katman kalınlığı
+
+// ============================================================
+// ÖNBELLEK
+// ============================================================
 
 List<ClosedRoadSection>? _cachedSource;
 List<Polyline> _cachedDashes = <Polyline>[];
@@ -29,12 +48,27 @@ List<Polyline> closedRoadDashes(List<ClosedRoadSection> sections) {
   final List<Polyline> result = <Polyline>[];
 
   for (final ClosedRoadSection section in sections) {
+    if (section.points.length < 2) continue;
+
+    // Katman 1: ALT — Turuncu, sürekli kalın çizgi (tren yolu gövdesi)
+    result.add(
+      Polyline(
+        points: section.points,
+        strokeWidth: kClosedRoadBaseWidth,
+        color: kClosedRoadColor,
+        borderStrokeWidth: 0.0,
+      ),
+    );
+
+    // Katman 2: ÜST — Beyaz kesikli çizgi (tren yolu traversleri)
     result.addAll(
       dashedPolylines(
         section.points,
-        color: kClosedRoadColor,
-        strokeWidth: kClosedRoadStrokeWidth,
-        borderWidth: kClosedRoadBorderWidth,
+        color: kClosedRoadDashedColor,
+        strokeWidth: kClosedRoadDashWidth,
+        borderWidth: 0.0,
+        dashMeters: 6.0,
+        gapMeters: 6.0,
       ),
     );
   }

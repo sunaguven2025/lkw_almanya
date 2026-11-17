@@ -232,6 +232,8 @@ class _HomePageState extends State<HomePage> {
   LatLng? destination;
   bool _isLoadingLocation = true;
   String? _locationError;
+  // Harita hareket filtresi için son konum.
+  LatLng? _lastMapMoveLocation;
 
   List<LatLng> routePoints = <LatLng>[];
 
@@ -367,6 +369,8 @@ class _HomePageState extends State<HomePage> {
   double _remainingDistance = 0.0;
 
   double _remainingDuration = 0.0;
+
+  double _routeTotalDurationFromApi = 0.0;
 
   String _currentInstructionText = 'Rotanız hazırlanıyor...';
 

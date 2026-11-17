@@ -947,8 +947,7 @@ extension _HomePageLogicX on _HomePageState {
     try {
       final dynamic result = await _tts.getVoices;
 
-      final String expectedLocale =
-          language.replaceAll('_', '-').toLowerCase();
+      final String expectedLocale = language.replaceAll('_', '-').toLowerCase();
       final List<Map<String, dynamic>> candidates = result is List
           ? result
               .whereType<Map>()
@@ -978,8 +977,7 @@ extension _HomePageLogicX on _HomePageState {
               .toString()
               .replaceAll('_', '-')
               .toLowerCase();
-          final String defaultName =
-              defaultVoice['name']?.toString() ?? '';
+          final String defaultName = defaultVoice['name']?.toString() ?? '';
           final bool localeMatches = defaultLocale == expectedLocale ||
               defaultLocale.startsWith('$expectedLocale-');
 
@@ -990,8 +988,7 @@ extension _HomePageLogicX on _HomePageState {
               'name': defaultName,
               'locale': defaultVoice['locale']?.toString() ?? language,
             };
-            final String? identifier =
-                defaultVoice['identifier']?.toString();
+            final String? identifier = defaultVoice['identifier']?.toString();
             if (identifier != null && identifier.isNotEmpty) {
               defaultMap['identifier'] = identifier;
             }
@@ -1025,7 +1022,9 @@ extension _HomePageLogicX on _HomePageState {
           final String network =
               voice['network_required']?.toString().toLowerCase() ?? '';
           final String name = voice['name']?.toString().toLowerCase() ?? '';
-          return network == 'true' || network == '1' || name.contains('network');
+          return network == 'true' ||
+              network == '1' ||
+              name.contains('network');
         }
 
         return requiresNetwork(a) == requiresNetwork(b)
@@ -1166,8 +1165,7 @@ extension _HomePageLogicX on _HomePageState {
         language,
       );
 
-      final bool hasMasculineVoice =
-          await _selectMasculineTtsVoice(language);
+      final bool hasMasculineVoice = await _selectMasculineTtsVoice(language);
 
       if (!mounted) {
         return;
@@ -1427,9 +1425,11 @@ extension _HomePageLogicX on _HomePageState {
 // ============================================================
 
   /// [urgent] = true: dönüş talimatı, yeniden rota, varış. Çalan anonsu
-  /// keser ve konuşur.
+  /// ANINDA keser ve hemen konuşur.
   /// [urgent] = false: mola uyarısı, kısıtlama, arayüz bildirimi. Yakın
-  /// zamanda acil bir anons verildiyse onu KESMEZ, bekler (çok yoğunsa düşer).
+  /// zamanda acil bir anons verildiyse onu KESMEZ, bekler. Ancak en fazla
+  /// 2 saniye bekler; daha uzun sürerse anons İPTAL edilir (navigasyon
+  /// anonsları zaman kritiktir, eski anonsu kaçırmak daha iyidir).
   Future<void> _speak(
     String text, {
     bool urgent = false,
@@ -1437,29 +1437,21 @@ extension _HomePageLogicX on _HomePageState {
     try {
       if (urgent) {
         _lastUrgentSpeechAt = DateTime.now();
+        await _tts.stop();
       } else {
-        for (int attempt = 0;; attempt++) {
-          final DateTime? last = _lastUrgentSpeechAt;
-
-          if (last == null) {
-            break;
-          }
-
+        final DateTime? last = _lastUrgentSpeechAt;
+        if (last != null) {
           final Duration since = DateTime.now().difference(last);
-
-          if (since >= _kUrgentSpeechWindow) {
-            break;
+          if (since.isNegative || since < _kUrgentSpeechWindow) {
+            final Duration waitTime = _kUrgentSpeechWindow - since;
+            if (waitTime > const Duration(seconds: 2)) {
+              return;
+            }
+            await Future<void>.delayed(waitTime);
           }
-
-          if (attempt >= 3) {
-            return;
-          }
-
-          await Future<void>.delayed(_kUrgentSpeechWindow - since);
         }
+        await _tts.stop();
       }
-
-      await _tts.stop();
 
       await _tts.setLanguage(_voiceLanguage);
 
@@ -1469,8 +1461,6 @@ extension _HomePageLogicX on _HomePageState {
         return;
       }
 
-      // setLanguage can reset the platform voice; reapply the real male voice
-      // immediately before each utterance instead of lowering a female voice's pitch.
       final dynamic voiceApplied = await _tts.setVoice(_selectedTtsVoice!);
       if (voiceApplied == 0 || voiceApplied == false) {
         _selectedTtsVoice = null;
@@ -1480,14 +1470,9 @@ extension _HomePageLogicX on _HomePageState {
       }
 
       await _tts.setPitch(1.0);
-
-      await _tts.speak(
-        text,
-      );
+      await _tts.speak(text);
     } catch (e) {
-      debugPrint(
-        'TTS ERROR: $e',
-      );
+      debugPrint('TTS ERROR: $e');
     }
   }
 
@@ -1930,9 +1915,7 @@ extension _HomePageLogicX on _HomePageState {
         final bool canUseDerivedSpeed = position.accuracy.isFinite &&
             (position.accuracy <= 0 || position.accuracy <= 35);
 
-        if (speedMps == 0.0 &&
-            _derivedSpeedEma >= 1.5 &&
-            canUseDerivedSpeed) {
+        if (speedMps == 0.0 && _derivedSpeedEma >= 1.5 && canUseDerivedSpeed) {
           speedMps = _derivedSpeedEma;
         }
 
@@ -2059,6 +2042,23 @@ extension _HomePageLogicX on _HomePageState {
 
   void _moveMapWithDirection(LatLng location, double heading) {
     try {
+      // Eğer konum 1 metreden az değiştiyse haritayı boşuna oynatma.
+      // (Dururken GPS titremesi haritayı sürekli sarsmasın).
+      if (_lastMapMoveLocation != null) {
+        final double moved = Geolocator.distanceBetween(
+          _lastMapMoveLocation!.latitude,
+          _lastMapMoveLocation!.longitude,
+          location.latitude,
+          location.longitude,
+        );
+        // Navigasyon başlamamışsa ve 1 metreden az oynadıysa iptal et.
+        // Navigasyon başladıysa (sürekli takip için) devam et.
+        if (moved < 1.0 && !_navigationStarted) {
+          return;
+        }
+      }
+      _lastMapMoveLocation = location;
+
       final double zoom = _navigationStarted ? 17.0 : mapController.camera.zoom;
 
       mapController.move(location, zoom);
@@ -2264,9 +2264,10 @@ extension _HomePageLogicX on _HomePageState {
       from = bestIdx;
     }
 
-    _routeTotalDuration = durationSum > 0
-        ? durationSum
-        : (_remainingDuration > 0 ? _remainingDuration : 0.0);
+    // API'den gelen toplam süre varsa onu kullan, yoksa talimat sürelerini topla.
+    _routeTotalDuration = _routeTotalDurationFromApi > 0
+        ? _routeTotalDurationFromApi
+        : (durationSum > 0 ? durationSum : _remainingDuration);
   }
 
   // ============================================================
@@ -3656,7 +3657,10 @@ extension _HomePageLogicX on _HomePageState {
           _lastRouteIndex = 0;
           _offRouteReadings = 0;
           _remainingDistance = totalDistance;
-          _remainingDuration = totalDuration;
+          _remainingDuration = 0;
+
+          // ⬇️ YENİ: Toplam süreyi sıfırla
+          _routeTotalDurationFromApi = 0.0;
           _currentInstructionText = instructions.isNotEmpty
               ? instructions.first.text
               : 'Rotayı takip edin.';
@@ -3935,14 +3939,6 @@ extension _HomePageLogicX on _HomePageState {
   // ============================================================
   // TOMTOM TRAFFIC - KAPALI YOLLARI ÇEK
   // ============================================================
-  // Sadece ROTAYA <=150 m olan olaylar gösterilir (eskiden rotanın tüm
-  // kutusundaki olaylar çiziliyordu).
-  //
-  // iconCategory (TomTom Traffic Incident Details): 1 Kaza, 6 Trafik
-  // sıkışıklığı, 7 Şerit kapalı, 8 Yol kapalı, 9 Yol çalışması.
-  // ⚠️ Bu eşlemeyi TomTom dokümanından bir kez daha doğrula.
-  // Eski kod 6'yı "yol çalışması" sayıyordu; sıkışıklığı kapalı yol diye
-  // kırmızı çiziyordu.
   Future<void> _fetchTomTomTrafficIncidents(List<LatLng> route) async {
     if (route.length < 2) return;
 
@@ -3981,9 +3977,7 @@ extension _HomePageLogicX on _HomePageState {
 
       const Set<int> shownCategories = <int>{1, 8, 9};
 
-      // PERFORMANS: 100 bin noktalı rotada her olay için tam tarama ana iş
-      // parçacığını saniyelerce kilitliyordu (debug modda 10-20 sn). Rotayı
-      // ~60 m aralıklı noktalara seyreltiyoruz (150 m eşik için yeterli).
+      // 1. Rotayı ~60 m aralıklı noktalara seyrelt (performans için)
       final List<LatLng> coarse = <LatLng>[route.first];
       LatLng kept = route.first;
       final double coarseKx =
@@ -4002,6 +3996,24 @@ extension _HomePageLogicX on _HomePageState {
 
       if (coarse.last != route.last) {
         coarse.add(route.last);
+      }
+
+      // ============================================================
+      // ✅ SPATIAL GRID: Rotayı 500m'lik hücrelere böl
+      // (Otobanda bile kaçırmamak için 500m çap yeterli)
+      // ============================================================
+      const double gridSizeDeg = 0.005; // ~500 metre
+      final Map<String, List<LatLng>> routeGrid = <String, List<LatLng>>{};
+
+      String gridKey(double lat, double lng) {
+        final int latCell = (lat / gridSizeDeg).floor();
+        final int lngCell = (lng / gridSizeDeg).floor();
+        return '$latCell,$lngCell';
+      }
+
+      for (final LatLng p in coarse) {
+        final String key = gridKey(p.latitude, p.longitude);
+        routeGrid.putIfAbsent(key, () => <LatLng>[]).add(p);
       }
 
       final List<ClosedRoadSection> closedRoads = [];
@@ -4037,29 +4049,35 @@ extension _HomePageLogicX on _HomePageState {
             (coords[1] as num).toDouble(),
             (coords[0] as num).toDouble(),
           );
-
-          // Aynı nokta iki kez: gerçek bir "çizgi" uydurmadan nokta olarak çizilir.
           points.add(p);
           points.add(p);
         }
 
         if (points.isEmpty) continue;
 
-        // Rotaya yakın mı? (ilk, orta, son noktayı dene)
-        final List<LatLng> samples = points.length <= 3
-            ? points
-            : <LatLng>[
-                points.first,
-                points[points.length ~/ 2],
-                points.last,
-              ];
-
+        // ============================================================
+        // ✅ GRID ARAMASI: Olayın 3x3 hücresine bak (tüm rotayı tarama!)
+        // ============================================================
         bool nearRoute = false;
+        final LatLng eventPoint = points.first;
 
-        for (final LatLng s in samples) {
-          if (_distanceToRouteMeters(s, coarse, stopBelow: 150.0) <= 150.0) {
-            nearRoute = true;
-            break;
+        final int eventLatCell = (eventPoint.latitude / gridSizeDeg).floor();
+        final int eventLngCell = (eventPoint.longitude / gridSizeDeg).floor();
+
+        for (int dLat = -1; dLat <= 1 && !nearRoute; dLat++) {
+          for (int dLng = -1; dLng <= 1 && !nearRoute; dLng++) {
+            final String key = '${eventLatCell + dLat},${eventLngCell + dLng}';
+            final List<LatLng>? nearbyPoints = routeGrid[key];
+
+            if (nearbyPoints == null || nearbyPoints.isEmpty) continue;
+
+            for (final LatLng p in nearbyPoints) {
+              if (_distanceToRouteMeters(p, coarse, stopBelow: 150.0) <=
+                  150.0) {
+                nearRoute = true;
+                break;
+              }
+            }
           }
         }
 
@@ -4074,7 +4092,6 @@ extension _HomePageLogicX on _HomePageState {
 
       if (mounted && closedRoads.isNotEmpty) {
         setState(() {
-          // Rota servisinden gelen kapalı yolları EZME, ekle.
           _closedRoadSections = <ClosedRoadSection>[
             ..._closedRoadSections,
             ...closedRoads,

@@ -2604,11 +2604,12 @@ out center;''';
                 ],
               ),
 
-            // KAPALI YOLLAR / YOL ÇALIŞMALARI (kesik çizgili)
+// ⬇️ KAPALI YOLLAR / YOL ÇALIŞMALARI (kesikli turuncu) ⬇️
             if (_closedRoadSections.isNotEmpty)
               PolylineLayer(
                 polylines: closedRoadDashes(_closedRoadSections),
               ),
+            // ⬆️ BURASI ÖNEMLİ — SİLME! ⬆️
 
             // MARKERLAR
             MarkerLayer(
