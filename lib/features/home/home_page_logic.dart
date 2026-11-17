@@ -927,35 +927,93 @@ extension _HomePageLogicX on _HomePageState {
         .hasMatch(descriptors);
   }
 
+  bool _isExplicitlyFeminineTtsVoice(Map<String, dynamic> voice) {
+    final String gender = voice['gender']?.toString().toLowerCase() ?? '';
+    if (gender == 'female' || gender == 'feminine' || gender == 'weiblich') {
+      return true;
+    }
+
+    final String descriptors = <Object?>[
+      voice['name'],
+      voice['identifier'],
+      voice['features'],
+    ].whereType<Object>().join(' ').toLowerCase();
+
+    return RegExp(r'(^|[^a-z])(female|feminine|weiblich)([^a-z]|$)')
+        .hasMatch(descriptors);
+  }
+
   Future<bool> _selectMasculineTtsVoice(String language) async {
     try {
       final dynamic result = await _tts.getVoices;
-      if (result is! List) {
-        _selectedTtsVoice = null;
-        _hasMaleVoice = false;
-        return false;
-      }
 
       final String expectedLocale =
           language.replaceAll('_', '-').toLowerCase();
-      final List<Map<String, dynamic>> candidates = result
-          .whereType<Map>()
-          .map((Map voice) => Map<String, dynamic>.from(voice))
-          .where((Map<String, dynamic> voice) {
-            final String locale = (voice['locale'] ?? '')
-                .toString()
-                .replaceAll('_', '-')
-                .toLowerCase();
-            return locale == expectedLocale ||
-                locale.startsWith('$expectedLocale-');
-          })
-          .where(_isMasculineTtsVoice)
-          .toList();
+      final List<Map<String, dynamic>> candidates = result is List
+          ? result
+              .whereType<Map>()
+              .map((Map voice) => Map<String, dynamic>.from(voice))
+              .where((Map<String, dynamic> voice) {
+                final String locale = (voice['locale'] ?? '')
+                    .toString()
+                    .replaceAll('_', '-')
+                    .toLowerCase();
+                return locale == expectedLocale ||
+                    locale.startsWith('$expectedLocale-');
+              })
+              .where(_isMasculineTtsVoice)
+              .toList()
+          : <Map<String, dynamic>>[];
 
       if (candidates.isEmpty) {
+        // Some Android engines omit gender from getVoices even when the user
+        // selected a male voice in system TTS settings. In that case, honor
+        // the engine's default voice, but never accept one explicitly marked
+        // as female.
+        final dynamic defaultResult = await _tts.getDefaultVoice;
+        if (defaultResult is Map) {
+          final Map<String, dynamic> defaultVoice =
+              Map<String, dynamic>.from(defaultResult);
+          final String defaultLocale = (defaultVoice['locale'] ?? '')
+              .toString()
+              .replaceAll('_', '-')
+              .toLowerCase();
+          final String defaultName =
+              defaultVoice['name']?.toString() ?? '';
+          final bool localeMatches = defaultLocale == expectedLocale ||
+              defaultLocale.startsWith('$expectedLocale-');
+
+          if (localeMatches &&
+              defaultName.isNotEmpty &&
+              !_isExplicitlyFeminineTtsVoice(defaultVoice)) {
+            final Map<String, String> defaultMap = <String, String>{
+              'name': defaultName,
+              'locale': defaultVoice['locale']?.toString() ?? language,
+            };
+            final String? identifier =
+                defaultVoice['identifier']?.toString();
+            if (identifier != null && identifier.isNotEmpty) {
+              defaultMap['identifier'] = identifier;
+            }
+
+            final dynamic applied = await _tts.setVoice(defaultMap);
+            if (applied != 0 && applied != false) {
+              _selectedTtsVoice = defaultMap;
+              _hasMaleVoice = true;
+              _maleVoiceWarningShown = false;
+              debugPrint(
+                'Using device default German TTS voice: $defaultName',
+              );
+              return true;
+            }
+          }
+        }
+
         _selectedTtsVoice = null;
         _hasMaleVoice = false;
-        debugPrint('No explicit masculine TTS voice found for $language.');
+        debugPrint(
+          'No masculine or usable default TTS voice found for $language.',
+        );
         return false;
       }
 
