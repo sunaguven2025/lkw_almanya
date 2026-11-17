@@ -911,6 +911,126 @@ extension _HomePageLogicX on _HomePageState {
   // SES SİSTEMİ
   // ============================================================
 
+  bool _isMasculineTtsVoice(Map<String, dynamic> voice) {
+    final String gender = voice['gender']?.toString().toLowerCase() ?? '';
+    if (gender == 'male' || gender == 'masculine' || gender == 'männlich') {
+      return true;
+    }
+
+    final String descriptors = <Object?>[
+      voice['name'],
+      voice['identifier'],
+      voice['features'],
+    ].whereType<Object>().join(' ').toLowerCase();
+
+    return RegExp(r'(^|[^a-z])(male|masculine|männlich)([^a-z]|$)')
+        .hasMatch(descriptors);
+  }
+
+  Future<bool> _selectMasculineTtsVoice(String language) async {
+    try {
+      final dynamic result = await _tts.getVoices;
+      if (result is! List) {
+        _selectedTtsVoice = null;
+        _hasMaleVoice = false;
+        return false;
+      }
+
+      final String expectedLocale =
+          language.replaceAll('_', '-').toLowerCase();
+      final List<Map<String, dynamic>> candidates = result
+          .whereType<Map>()
+          .map((Map voice) => Map<String, dynamic>.from(voice))
+          .where((Map<String, dynamic> voice) {
+            final String locale = (voice['locale'] ?? '')
+                .toString()
+                .replaceAll('_', '-')
+                .toLowerCase();
+            return locale == expectedLocale ||
+                locale.startsWith('$expectedLocale-');
+          })
+          .where(_isMasculineTtsVoice)
+          .toList();
+
+      if (candidates.isEmpty) {
+        _selectedTtsVoice = null;
+        _hasMaleVoice = false;
+        debugPrint('No explicit masculine TTS voice found for $language.');
+        return false;
+      }
+
+      // Prefer a downloaded/offline voice so navigation does not depend on
+      // network access. Explicit male metadata/IDs are required; pitch alone
+      // is not treated as a substitute for a male voice.
+      candidates.sort((Map<String, dynamic> a, Map<String, dynamic> b) {
+        bool requiresNetwork(Map<String, dynamic> voice) {
+          final String network =
+              voice['network_required']?.toString().toLowerCase() ?? '';
+          final String name = voice['name']?.toString().toLowerCase() ?? '';
+          return network == 'true' || network == '1' || name.contains('network');
+        }
+
+        return requiresNetwork(a) == requiresNetwork(b)
+            ? 0
+            : (requiresNetwork(a) ? 1 : -1);
+      });
+
+      final Map<String, dynamic> selected = candidates.first;
+      final String voiceName = selected['name']?.toString() ?? '';
+      final String voiceLocale = selected['locale']?.toString() ?? language;
+      if (voiceName.isEmpty) {
+        _selectedTtsVoice = null;
+        _hasMaleVoice = false;
+        return false;
+      }
+
+      final Map<String, String> voiceMap = <String, String>{
+        'name': voiceName,
+        'locale': voiceLocale,
+      };
+      final String? identifier = selected['identifier']?.toString();
+      if (identifier != null && identifier.isNotEmpty) {
+        voiceMap['identifier'] = identifier;
+      }
+
+      final dynamic applied = await _tts.setVoice(voiceMap);
+      if (applied == 0 || applied == false) {
+        _selectedTtsVoice = null;
+        _hasMaleVoice = false;
+        debugPrint('TTS engine rejected masculine voice: $voiceName');
+        return false;
+      }
+
+      _selectedTtsVoice = voiceMap;
+      _hasMaleVoice = true;
+      _maleVoiceWarningShown = false;
+      debugPrint('Selected explicit masculine TTS voice: $voiceName');
+      return true;
+    } catch (e) {
+      _selectedTtsVoice = null;
+      _hasMaleVoice = false;
+      debugPrint('Could not select masculine TTS voice: $e');
+      return false;
+    }
+  }
+
+  void _showMaleVoiceUnavailable() {
+    if (!mounted || _maleVoiceWarningShown) {
+      return;
+    }
+
+    _maleVoiceWarningShown = true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Bu cihazda Almanca erkek sesi bulunamadı. Cihazın metin okuma '
+          'ayarlarından bir Almanca erkek ses paketi yükleyin.',
+        ),
+        duration: Duration(seconds: 6),
+      ),
+    );
+  }
+
   Future<void> _initializeVoice() async {
     try {
       final bool available = await _speech.initialize(
@@ -950,54 +1070,8 @@ extension _HomePageLogicX on _HomePageState {
         0.55,
       );
 
-      // 🎙️ SES TONU (PITCH) AYARI:
-      // Samsung cihazlar setVoice'ı yoksaydığı için sesi zorla kalınlaştırıyoruz.
-      // NOT: Düşük pitch kabin gürültüsünde anlaşılırlığı düşürebilir; sahada test et.
-      await _tts.setPitch(
-        0.6,
-      );
-
-      // ============================================================
-      // 🎙️ ERKEK SESİ SEÇİMİ
-      // ============================================================
-      try {
-        final List<dynamic> voices = await _tts.getVoices;
-
-        dynamic germanMaleNetworkVoice;
-        dynamic germanMaleVoice;
-
-        for (var voice in voices) {
-          final String name = voice['name'].toString().toLowerCase();
-          final String locale = voice['locale'].toString().toLowerCase();
-          if (locale.contains('de-de') ||
-              locale.contains('de_de') ||
-              locale.contains('de')) {
-            if (name.contains('deb')) {
-              if (name.contains('network')) {
-                germanMaleNetworkVoice = voice;
-              } else {
-                germanMaleVoice ??= voice;
-              }
-            }
-          }
-        }
-
-        final selectedVoice = germanMaleNetworkVoice ?? germanMaleVoice;
-
-        if (selectedVoice != null) {
-          final Map<String, String> voiceMap = Map<String, String>.from(
-            selectedVoice as Map,
-          );
-          await _tts.setVoice(voiceMap);
-          debugPrint('✅ ERKEK SESİ SEÇİLDİ: ${voiceMap['name']}');
-        } else {
-          debugPrint(
-              '⚠️ Uygun bir Almanca erkek sesi bulunamadı. Varsayılan ses kullanılıyor.');
-        }
-      } catch (e) {
-        debugPrint('SES LİSTESİ ALINAMADI: $e');
-      }
-      // ============================================================
+      await _tts.setPitch(1.0);
+      await _selectMasculineTtsVoice(_voiceLanguage);
 
       if (!mounted) {
         return;
@@ -1034,6 +1108,9 @@ extension _HomePageLogicX on _HomePageState {
         language,
       );
 
+      final bool hasMasculineVoice =
+          await _selectMasculineTtsVoice(language);
+
       if (!mounted) {
         return;
       }
@@ -1042,7 +1119,13 @@ extension _HomePageLogicX on _HomePageState {
         _voiceLanguage = language;
         _voiceLanguageName = name;
         _isListening = false;
+        _hasMaleVoice = hasMasculineVoice;
       });
+
+      if (!hasMasculineVoice) {
+        _showMaleVoiceUnavailable();
+        return;
+      }
 
       String message;
 
@@ -1120,6 +1203,34 @@ extension _HomePageLogicX on _HomePageState {
                     'de-DE',
                     'Deutsch',
                   );
+                },
+              ),
+              ListTile(
+                leading: Icon(
+                  _hasMaleVoice
+                      ? Icons.record_voice_over
+                      : Icons.voice_over_off,
+                  color: _hasMaleVoice ? Colors.green : Colors.orange,
+                ),
+                title: Text(
+                  _hasMaleVoice ? 'Erkek sesi' : 'Erkek sesi bulunamadı',
+                ),
+                subtitle: Text(
+                  _selectedTtsVoice?['name'] ??
+                      'Cihazın metin okuma ayarlarını kontrol edin',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: const Icon(Icons.play_arrow),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  if (_hasMaleVoice) {
+                    _speak(
+                      'Guten Tag. Dies ist die männliche Navigationsstimme.',
+                    );
+                  } else {
+                    _showMaleVoiceUnavailable();
+                  }
                 },
               ),
             ],
@@ -1292,10 +1403,25 @@ extension _HomePageLogicX on _HomePageState {
 
       await _tts.stop();
 
-      // ⚠️ DÜZELTME: TTS motoru bazen dil ayarını unutuyor
-      // (özellikle web'de). Her konuşmada dili zorla.
-      // Her zaman Almanca konuş
-      await _tts.setLanguage('de-DE');
+      await _tts.setLanguage(_voiceLanguage);
+
+      if (_selectedTtsVoice == null &&
+          !await _selectMasculineTtsVoice(_voiceLanguage)) {
+        _showMaleVoiceUnavailable();
+        return;
+      }
+
+      // setLanguage can reset the platform voice; reapply the real male voice
+      // immediately before each utterance instead of lowering a female voice's pitch.
+      final dynamic voiceApplied = await _tts.setVoice(_selectedTtsVoice!);
+      if (voiceApplied == 0 || voiceApplied == false) {
+        _selectedTtsVoice = null;
+        _hasMaleVoice = false;
+        _showMaleVoiceUnavailable();
+        return;
+      }
+
+      await _tts.setPitch(1.0);
 
       await _tts.speak(
         text,

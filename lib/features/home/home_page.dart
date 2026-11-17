@@ -295,6 +295,12 @@ class _HomePageState extends State<HomePage> {
 
   String _voiceLanguageName = 'Deutsch';
 
+  Map<String, String>? _selectedTtsVoice;
+
+  bool _hasMaleVoice = false;
+
+  bool _maleVoiceWarningShown = false;
+
   // ============================================================
   // KONUM
   // ============================================================
