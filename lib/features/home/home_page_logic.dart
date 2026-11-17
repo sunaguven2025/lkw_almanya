@@ -78,7 +78,7 @@ const double _kMovingSpeedMps = 0.5;
 const bool kUseForegroundService = true;
 
 /// TEST: haritada canlı hata ayıklama kutusu. Yayından önce false yap.
-const bool kShowDebugOverlay = true;
+const bool kShowDebugOverlay = false;
 
 /// Dönüş talimatı anonsundan sonra düşük öncelikli anonslar bu süre bekler.
 const Duration _kUrgentSpeechWindow = Duration(seconds: 8);
@@ -1312,6 +1312,15 @@ extension _HomePageLogicX on _HomePageState {
   // ============================================================
 
   Future<void> loadLocation() async {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingLocation = true;
+      _locationError = null;
+    });
+
     try {
       final Position position = await getUserLocation();
 
@@ -1326,6 +1335,8 @@ extension _HomePageLogicX on _HomePageState {
 
       setState(() {
         userLocation = location;
+        _isLoadingLocation = false;
+        _locationError = null;
         _isFollowingLocation = true; // ⬅️ Başlangıçta takibi aç
 
         if (position.heading >= 0 && position.heading.isFinite) {
@@ -1358,15 +1369,21 @@ extension _HomePageLogicX on _HomePageState {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
+      setState(() {
+        _isLoadingLocation = false;
+        _locationError =
             'GPS sinyali henüz yok. Açık alana çıkın; sinyal gelince '
-            'harita otomatik açılır.',
+            'harita otomatik açılır.';
+      });
+
+      if (userLocation != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('GPS sinyali bekleniyor.'),
+            duration: Duration(seconds: 4),
           ),
-          duration: Duration(seconds: 6),
-        ),
-      );
+        );
+      }
 
       _startPositionTracking();
     } catch (e) {
@@ -1374,13 +1391,16 @@ extension _HomePageLogicX on _HomePageState {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Konum alınamadı: $e',
-          ),
-        ),
-      );
+      setState(() {
+        _isLoadingLocation = false;
+        _locationError = 'Konum alınamadı: $e';
+      });
+
+      if (userLocation != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_locationError!)),
+        );
+      }
     }
   }
 
@@ -1723,9 +1743,12 @@ extension _HomePageLogicX on _HomePageState {
         // sürüş sırasında bile 0 km/h). O zaman konumlardan türetilen hızı
         // kullan. Eşik 2,5 m/s ve doğruluk <=25 m: dururken GPS titremesi
         // hareket sanılmasın.
+        final bool canUseDerivedSpeed = position.accuracy.isFinite &&
+            (position.accuracy <= 0 || position.accuracy <= 35);
+
         if (speedMps == 0.0 &&
-            _derivedSpeedEma >= 2.5 &&
-            (position.accuracy <= 0 || position.accuracy <= 25)) {
+            _derivedSpeedEma >= 1.5 &&
+            canUseDerivedSpeed) {
           speedMps = _derivedSpeedEma;
         }
 
@@ -1776,6 +1799,8 @@ extension _HomePageLogicX on _HomePageState {
         }
 
         userLocation = displayLocation;
+        _isLoadingLocation = false;
+        _locationError = null;
 
         if (firstFix) {
           _isFollowingLocation = true;
@@ -1833,6 +1858,13 @@ extension _HomePageLogicX on _HomePageState {
       },
       onError: (Object error) {
         debugPrint('POSITION STREAM ERROR: $error');
+        if (mounted && userLocation == null) {
+          setState(() {
+            _isLoadingLocation = false;
+            _locationError =
+                'GPS bağlantısı kurulamadı. Konum iznini ve GPS ayarlarını kontrol edin.';
+          });
+        }
       },
     );
   }

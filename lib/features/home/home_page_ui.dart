@@ -2167,9 +2167,9 @@ out center;''';
       return const SizedBox.shrink();
     }
 
-    const double cardWidth = 76;
-    const double valueSize = 24;
-    const double labelSize = 8;
+    const double cardWidth = 88;
+    const double valueSize = 28;
+    const double labelSize = 9;
     const double unitSize = 10;
 
     final int speedKmh = (_currentSpeed * 3.6).round();
@@ -2185,7 +2185,7 @@ out center;''';
     }) {
       return Container(
         width: cardWidth,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
         decoration: BoxDecoration(
           color: background,
           borderRadius: BorderRadius.circular(14),

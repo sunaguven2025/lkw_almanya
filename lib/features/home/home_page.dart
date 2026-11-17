@@ -230,6 +230,8 @@ class _HomePageState extends State<HomePage> {
 
   LatLng? userLocation;
   LatLng? destination;
+  bool _isLoadingLocation = true;
+  String? _locationError;
 
   List<LatLng> routePoints = <LatLng>[];
 
@@ -477,33 +479,98 @@ class _HomePageState extends State<HomePage> {
             ),
       body: userLocation == null
           ? Center(
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const CircularProgressIndicator(),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Konum alınıyor...',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Card(
+                    elevation: 0,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest
+                        .withValues(alpha: 0.45),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(28),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 68,
+                            height: 68,
+                            decoration: BoxDecoration(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withValues(alpha: 0.12),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              _isLoadingLocation
+                                  ? Icons.my_location
+                                  : Icons.location_off_outlined,
+                              size: 32,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Text(
+                            _isLoadingLocation
+                                ? 'Konum aranıyor'
+                                : 'Konum alınamadı',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _locationError ??
+                                'Haritayı açmak için GPS ve konum iznini kontrol edin.',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                            textAlign: TextAlign.center,
+                          ),
+                          if (_isLoadingLocation) ...[
+                            const SizedBox(height: 20),
+                            const LinearProgressIndicator(),
+                          ],
+                          const SizedBox(height: 20),
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              FilledButton.icon(
+                                onPressed:
+                                    _isLoadingLocation ? null : loadLocation,
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Tekrar dene'),
+                              ),
+                              if (!_isLoadingLocation)
+                                OutlinedButton.icon(
+                                  onPressed: () {
+                                    Geolocator.openLocationSettings();
+                                  },
+                                  icon: const Icon(Icons.gps_fixed),
+                                  label: const Text('GPS ayarları'),
+                                ),
+                              if (!_isLoadingLocation)
+                                TextButton.icon(
+                                  onPressed: () {
+                                    Geolocator.openAppSettings();
+                                  },
+                                  icon: const Icon(Icons.settings_outlined),
+                                  label: const Text('Uygulama izinleri'),
+                                ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Uzun sürerse konum iznini ve GPS\'i kontrol edin.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: loadLocation,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Tekrar dene'),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             )
